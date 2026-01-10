@@ -1728,6 +1728,7 @@ class StandardModel:
         Q_s_arr = np.zeros(len(x_arr))
         c_s_sq_D_arr = np.nan*np.ones(len(x_arr))
         c_s_sq_arr = np.nan*np.ones(len(x_arr))
+        f_MG_arr = np.nan*np.ones(len(x_arr))
         stable = True
 
         H_arr = self.output['H0']*E_arr
@@ -1763,6 +1764,7 @@ class StandardModel:
         self.output['Q_s'] = Q_s_arr
         self.output['c_s_sq_D'] = c_s_sq_D_arr
         self.output['c_s_sq'] = c_s_sq_arr
+        self.output['f_MG'] = f_MG_arr
         self.output['stable'] = stable            
     
 
@@ -1785,7 +1787,7 @@ class StandardModel:
                 'A', 'Omega_DE', 'w_DE', 'Omega_phi_via_closure', 
                 'calB', 'calC', 'beta', 'chi/delta', 'M_star_sq',
                 'alpha_M', 'alpha_B', 'alpha_B_prime', 'alpha_K' ,
-                'tilde_calE', 'tilde_calP', 'w_phi', 'D', 'Q_s', 'c_s_sq_D', 'c_s_sq'
+                'tilde_calE', 'tilde_calP', 'w_phi', 'D', 'Q_s', 'c_s_sq_D', 'c_s_sq', 'f_MG'
             ]
         else:
             keys = [

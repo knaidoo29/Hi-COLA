@@ -658,6 +658,16 @@ class HorndeskiModel(StandardModel):
         self.symfunc['c_s_sq'] = self.symfunc['c_s_sq_D']/self.symfunc['D']
     
 
+    def get_f_MG(self):
+        """
+        Constructs void stability equation.
+        """
+        self.symfunc['f_MG'] = 4*(self.symfunc['alpha_B'] + self.symfunc['alpha_M'])
+        self.symfunc['f_MG'] *= (2*self.symfunc['alpha_M'] + self.symfunc['alpha_B'])
+        self.symfunc['f_MG'] *= self.sym['rho_c'] + self.sym['rho_b']
+        self.symfunc['f_MG'] /= self.symfunc['M_star_sq']*(self.symfunc['c_s_sq_D']**2)*(self.sym['E']**2)
+    
+
     # Set mass ratios
     
     def set_mass_ratios(self, M_sp=1, M_Kp2=1, M_G3p=1, M_G4p2=1):
@@ -820,6 +830,9 @@ class HorndeskiModel(StandardModel):
             c_s_sq_D = self.symfunc['c_s_sq_D'].subs(sub_dict)
             c_s_sq = self.symfunc['c_s_sq'].subs(sub_dict)
 
+            self.get_f_MG()
+            f_MG = self.symfunc['f_MG'].subs(sub_dict)
+
             if self.verbose:
                 print(' - substituting X = 0.5 * E^2 * phi_prime^2')
                 print(
@@ -897,6 +910,8 @@ class HorndeskiModel(StandardModel):
             alpha_B_prime = alpha_B_prime.subs(sub_dict)
             c_s_sq = c_s_sq.subs(sub_dict)
 
+            f_MG = f_MG.subs(sub_dict)
+
             # we will copy these substituted and simplified functions to the class symfunc dictionary, we avoided 
             # doing this before as some of these are re-called and redefined in the 'get' functions.
             self.symfunc['G_G_4/G_N'] = G_G_4_GN
@@ -931,6 +946,7 @@ class HorndeskiModel(StandardModel):
             self.symfunc['Q_s'] = Q_s
             self.symfunc['c_s_sq_D'] = c_s_sq_D
             self.symfunc['c_s_sq'] = c_s_sq
+            self.symfunc['f_MG'] = f_MG
 
             # Lambdify functions
 
@@ -998,6 +1014,7 @@ class HorndeskiModel(StandardModel):
             self.lambda_funcs['Q_s'] = sym.lambdify(variables, self.symfunc['Q_s'], 'numpy')
             self.lambda_funcs['c_s_sq_D'] = sym.lambdify(variables, self.symfunc['c_s_sq_D'], 'numpy')
             self.lambda_funcs['c_s_sq'] = sym.lambdify(variables, self.symfunc['c_s_sq'], 'numpy')
+            self.lambda_funcs['f_MG'] = sym.lambdify(variables, self.symfunc['f_MG'], 'numpy')
 
             if self.verbose:
                 print(' - Done!')
@@ -1952,6 +1969,7 @@ class HorndeskiModel(StandardModel):
         self.output['Q_s'] = None
         self.output['c_s_sq_D'] = None
         self.output['c_s_sq'] = None
+        self.output['f_MG'] = None
         self.output['stable'] = None
     
 
@@ -2015,6 +2033,7 @@ class HorndeskiModel(StandardModel):
             Q_s_arr = np.zeros((len(roots1), len(x_arr)))
             c_s_sq_D_arr = np.zeros((len(roots1), len(x_arr)))
             c_s_sq_arr = np.zeros((len(roots1), len(x_arr)))
+            f_MG_arr = np.zeros((len(roots1), len(x_arr)))
 
             stable = [True for r in roots1]
 
@@ -2062,8 +2081,9 @@ class HorndeskiModel(StandardModel):
                 Q_s_arr[idx] = self.lambda_funcs['Q_s'](*variables)
                 c_s_sq_D_arr[idx] = self.lambda_funcs['c_s_sq_D'](*variables)
                 c_s_sq_arr[idx] = self.lambda_funcs['c_s_sq'](*variables)
+                f_MG_arr[idx] = self.lambda_funcs['f_MG'](*variables)
 
-                if Q_s_arr.all() > 0 and c_s_sq_arr.all() > 0:
+                if Q_s_arr.all() > 0 and c_s_sq_arr.all() > 0 and f_MG_arr.all() <= 1:
                     stable[idx] = True
                 else:
                     stable[idx] = False
@@ -2107,6 +2127,7 @@ class HorndeskiModel(StandardModel):
             self.output['Q_s'] = Q_s_arr
             self.output['c_s_sq_D'] = c_s_sq_D_arr
             self.output['c_s_sq'] = c_s_sq_arr
+            self.output['f_MG'] = f_MG_arr
             self.output['stable'] = stable
 
 
