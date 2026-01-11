@@ -1809,7 +1809,7 @@ class StandardModel:
 
 
     def run_solver(
-            self, z_max=2000., Npoints=1000, forwards=True, derived=True, HS_correction=True
+            self, z_max=1200., Npoints=200, forwards=True, derived=True, HS_correction=True
         ):
         """
         Runs the numerical solver for a user defined Horndeski model.
