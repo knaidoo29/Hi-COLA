@@ -359,7 +359,7 @@ class HorndeskiModel(StandardModel):
         self.symfunc['fried_closure'] += self.sym['rho_b'] + self.sym['rho_c'] + self.sym['rho_l']
         self.symfunc['fried_closure'] += self.symfunc['rho_phi']
         self.symfunc['fried_closure'] -= self.sym['E']**2
-        self.symfunc['fried_closure'] /= self.sym['E']**2
+        # self.symfunc['fried_closure'] /= self.sym['E']**2
 
 
     def get_G_G_4(self):
@@ -1086,8 +1086,97 @@ class HorndeskiModel(StandardModel):
         self._solver_success = True
 
 
-    # Computes derivaties for the solver via scipy's solve_ivp method
+    def _get_variables(self, a, E, phi, phi_prime, E_newton=False):
+        """
+        Generates variable outputs for symbolic lambda functions from Hi-COLA.
 
+        Parameters
+        ----------
+        a : float or array
+            Scale factor
+        E : float or array
+            The normalised expansion history.
+        phi : float or array
+            The scalar field.
+        phi_prime : float or array
+            The scalar field derivative.
+        E_newton : bool, optional
+            This will output variables without E as the leading term to be used with the newton-raphson
+            solver for E, see the "_solve4E" function in this class.
+        
+        Returns
+        -------
+        variables : list
+            List of variables to enter the Friedmann closure related functions.
+        """
+
+        w_l = self.compute_w_l(a)
+        
+        rho_g = self.get_rho_g(a, self.params['H0_ref']*1e-2)
+        rho_b = self.get_rho_b(a, self.params['Omega_b0_ref'])
+        rho_c = self.get_rho_c(a, self.params['Omega_c0_ref'])
+        rho_l = self.get_rho_l(a, self.params['Omega_l0_ref'], w0=self.params['w0'], wa=self.params['wa'])
+        
+        rho_nu_ur = self.get_rho_nu_ur(a, self.params['H0_ref']*1e-2)
+        rho_nu_nr = 0.
+        for mnu in self.params['mnu']:
+            rho_nu_nr += self.get_rho_nu_nr(a, self.params['H0_ref']*1e-2, mnu)
+        w_nu_nr = 0.
+        for mnu in self.params['mnu']:
+            w_nu_nr += self.compute_w_nu_nr(a, mnu)*self.get_rho_nu_nr(a, self.params['H0_ref']*1e-2, mnu)
+        if utils.isscalar(rho_nu_nr):
+            if rho_nu_nr != 0.:
+                w_nu_nr /= rho_nu_nr
+        else:
+            w_nu_nr = np.zeros_like(rho_nu_nr)
+            cond = np.where(rho_nu_nr != 0)
+            w_nu_nr[cond] /= rho_nu_nr[cond]
+
+        if E_newton:
+            variables = [
+                phi, phi_prime, 
+                rho_g, rho_b, rho_c, rho_l, 
+                rho_nu_ur, rho_nu_nr, w_nu_nr, w_l, 
+                *self.params['K_G3_G4_values'], self.params['fH']
+            ]
+        else:
+            variables = [
+                E, phi, phi_prime, 
+                rho_g, rho_b, rho_c, rho_l, 
+                rho_nu_ur, rho_nu_nr, w_nu_nr, w_l, 
+                *self.params['K_G3_G4_values'], self.params['fH']
+            ]
+        
+        return variables
+
+
+    def _solve4E(self, variables, E_guess):
+        """
+        Solves the Friedmann closure relation for E.
+
+        Parameters
+        ----------
+        variables : list
+            List of variables to enter the Friedmann closure related functions.
+        E_guess : float
+            An initial guess for the solution to E, this will output the closest root to that solution.
+        
+        Returns
+        -------
+        E : float
+            The solution for E to solve the closure relation.
+        """
+
+        E = newton(
+            lambda _E: self.lambda_funcs['fried_closure'](_E, *variables), 
+            E_guess,
+            fprime = lambda _E: self.lambda_funcs['fried_closure_dE'](_E, *variables), 
+            fprime2 = lambda _E: self.lambda_funcs['fried_closure_dE2'](_E, *variables), 
+            tol=self.newton_tol
+        )
+
+        return E
+    
     def _compute_primes(self, x, Y, timeout=5):
         """
         Compute prime functions for numerical solver.
@@ -1101,60 +1190,37 @@ class HorndeskiModel(StandardModel):
         timeout : float, optional
             Time in seconds to force the solver to fail.
         """
-        # convert x = log(a) to scale factor
-        a = np.exp(x)
+        try:
+            # convert x = log(a) to scale factor
+            a = np.exp(x)
 
-        # `_` used to denote current value.
-        _phi, _phi_prime = Y
+            # `_` used to denote current value.
+            _E, _phi, _phi_prime = Y
+            
+            variables = self._get_variables(a, _E, _phi, _phi_prime, E_newton=True)
+            
+            _E = self._solve4E(variables, _E)
 
-        _w_l = self.compute_w_l(a)
+            E_prime = self.lambda_funcs['E_prime'](_E, *variables)
+            phi_prime = _phi_prime
+            phi_primeprime = self.lambda_funcs['phi_primeprime'](_E, *variables)
+
+            timenow = self._check_timer()
+
+            if timenow >= timeout:
+                E_prime = np.nan
+                phi_prime = np.nan
+                phi_primeprime = np.nan
+
+            if np.isfinite([E_prime, phi_prime, phi_primeprime]).all() == False:
+                self._solver_success = False
+            
+            return [E_prime, phi_prime, phi_primeprime]
         
-        _rho_g = self.get_rho_g(a, self.params['H0_ref']*1e-2)
-        _rho_b = self.get_rho_b(a, self.params['Omega_b0_ref'])
-        _rho_c = self.get_rho_c(a, self.params['Omega_c0_ref'])
-        _rho_l = self.get_rho_l(a, self.params['Omega_l0_ref'], w0=self.params['w0'], wa=self.params['wa'])
-        
-        _rho_nu_ur = self.get_rho_nu_ur(a, self.params['H0_ref']*1e-2)
-        _rho_nu_nr = 0.
-        for _mnu in self.params['mnu']:
-            _rho_nu_nr += self.get_rho_nu_nr(a, self.params['H0_ref']*1e-2, _mnu)
-        _w_nu_nr = 0.
-        for _mnu in self.params['mnu']:
-            _w_nu_nr += self.compute_w_nu_nr(a, _mnu)*self.get_rho_nu_nr(a, self.params['H0_ref']*1e-2, _mnu)
-        if _rho_nu_nr != 0.:
-            _w_nu_nr /= _rho_nu_nr
-
-        variables = [
-            _phi, _phi_prime, 
-            _rho_g, _rho_b, _rho_c, _rho_l, 
-            _rho_nu_ur, _rho_nu_nr, _w_nu_nr, _w_l, 
-            *self.params['K_G3_G4_values'], self.params['fH']
-        ]
-
-        _E_guess = self.compute_E_LCDM(a)
-
-        _E = newton(
-            lambda _E: self.lambda_funcs['fried_closure'](_E, *variables), 
-            _E_guess,
-            fprime = lambda _E: self.lambda_funcs['fried_closure_dE'](_E, *variables), 
-            fprime2 = lambda _E: self.lambda_funcs['fried_closure_dE2'](_E, *variables), 
-            tol=self.newton_tol
-        )
-
-        phi_prime = _phi_prime
-        phi_primeprime = self.lambda_funcs['phi_primeprime'](_E, *variables)
-
-        timenow = self._check_timer()
-
-        if timenow >= timeout:
-            phi_prime = np.nan
-            phi_primeprime = np.nan
-
-        if np.isfinite([phi_prime, phi_primeprime]).all() == False:
-            self._solver_success = False
-        
-        return [phi_prime, phi_primeprime]
-
+        except RuntimeError:
+            # Signal RK45 that this step is invalid
+            return np.full_like(Y, np.nan)
+    
 
     # Numerically computed quantities
 
@@ -1554,7 +1620,9 @@ class HorndeskiModel(StandardModel):
     
 
     def _run_solver_ODE_HG(
-            self, phi_ini, phi_prime_ini, method='RK45', timeout=5, store_hat=False
+            self, 
+            E_ini, 
+            phi_ini, phi_prime_ini, method='RK45', timeout=5, store_hat=False
         ):
         """
         Returns the Horndeski solver outputs.
@@ -1658,22 +1726,24 @@ class HorndeskiModel(StandardModel):
 
                 from scipy.integrate import solve_ivp
 
-                Y_ini = [phi_ini, phi_prime_ini]
+                Y_ini = [E_ini, phi_ini, phi_prime_ini]
 
                 self._initiate_solver_status()
                 self._start_timer()
                 
                 solution = solve_ivp(
                     self._compute_primes, [x_ini, x_final], Y_ini, t_eval=x_arr, method=method, 
-                    args=(timeout,), 
-                    rtol = 1e-8
+                    args=(timeout,),
+                    rtol = 1e-8,
+                    max_step=(x_arr[1]-x_arr[0])
                 )
                 
                 solver_success[idx] = self._solver_success
                 
                 solution = solution["y"].T
-                _phi_arr = solution[:,0]
-                _phi_prime_arr = solution[:,1]
+                _E_arr = solution[:,0]
+                _phi_arr = solution[:,1]
+                _phi_prime_arr = solution[:,2]
 
                 _rho_g_arr = np.zeros_like(_phi_arr)
                 _rho_b_arr = np.zeros_like(_phi_arr)
@@ -1685,54 +1755,23 @@ class HorndeskiModel(StandardModel):
                 _w_nu_nr_arr = np.zeros_like(_phi_arr)
                 _w_l_arr = np.zeros_like(_phi_arr)
 
-                _E_arr = np.zeros_like(_phi_arr)
-                
                 for i in range(0, len(_phi_arr)):
                     
                     a = np.exp(x_arr[i])
 
-                    _phi = _phi_arr[i]
-                    _phi_prime = _phi_prime_arr[i]
+                    variables = self._get_variables(a, _E_arr[i], _phi_arr[i], _phi_prime_arr[i], E_newton=True)
 
-                    _rho_g = self.get_rho_g(a, self.params['H0_ref']*1e-2)
-                    _rho_b = self.get_rho_b(a, self.params['Omega_b0_ref'])
-                    _rho_c = self.get_rho_c(a, self.params['Omega_c0_ref'])
-                    _rho_l = self.get_rho_l(a, self.params['Omega_l0_ref'], w0=self.params['w0'], wa=self.params['wa'])
-                    _rho_nu_ur = self.get_rho_nu_ur(a, self.params['H0_ref']*1e-2)
-                    _rho_nu_nr = 0.
-                    for _mnu in self.params['mnu']:
-                        _rho_nu_nr += self.get_rho_nu_nr(a, self.params['H0_ref']*1e-2, _mnu)
+                    _E_arr[i] = self._solve4E(variables, _E_arr[i])
 
-                    _w_nu_nr = 0.
-                    for _mnu in self.params['mnu']:
-                        _w_nu_nr += self.compute_w_nu_nr(a, _mnu)*self.get_rho_nu_nr(a, self.params['H0_ref']*1e-2, _mnu)
-                    if _rho_nu_nr != 0:
-                        _w_nu_nr /= _rho_nu_nr
-                    _w_l = self.compute_w_l(a)
-                    
-                    variables = [
-                        _phi, _phi_prime, _rho_g, _rho_b, _rho_c, _rho_l, _rho_nu_ur, _rho_nu_nr, _w_nu_nr,  _w_l, *self.params['K_G3_G4_values'], self.params['fH']
-                    ]
-                    
-                    _E_guess = self.compute_E_LCDM(a)
+                    _rho_g_arr[i] = variables[2]
+                    _rho_b_arr[i] = variables[3]
+                    _rho_c_arr[i] = variables[4]
+                    _rho_l_arr[i] = variables[5]
+                    _rho_nu_ur_arr[i] = variables[6]
+                    _rho_nu_nr_arr[i] = variables[7]
 
-                    _E_arr[i] = newton(
-                        lambda _E: self.lambda_funcs['fried_closure'](_E, *variables), 
-                        _E_guess,
-                        fprime = lambda _E: self.lambda_funcs['fried_closure_dE'](_E, *variables), 
-                        fprime2 = lambda _E: self.lambda_funcs['fried_closure_dE2'](_E, *variables), 
-                        tol=self.newton_tol
-                    )
-
-                    _rho_g_arr[i] = _rho_g
-                    _rho_b_arr[i] = _rho_b
-                    _rho_c_arr[i] = _rho_c
-                    _rho_l_arr[i] = _rho_l
-                    _rho_nu_ur_arr[i] = _rho_nu_ur
-                    _rho_nu_nr_arr[i] = _rho_nu_nr
-
-                    _w_nu_nr_arr[i] = _w_nu_nr
-                    _w_l_arr[i] = _w_l
+                    _w_nu_nr_arr[i] = variables[8]
+                    _w_l_arr[i] = variables[9]
 
                 variables = [
                     _E_arr, _phi_arr, _phi_prime_arr, 
@@ -2132,7 +2171,7 @@ class HorndeskiModel(StandardModel):
 
 
     def run_solver(
-            self, z_max=2000., Npoints=1000, forwards=True, GR=False, variable1=2, variable2=None, 
+            self, z_max=1200., Npoints=1000, forwards=True, GR=False, variable1=2, variable2=None, 
             phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=5, newton_tol=1e-5,
             derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True
         ):
@@ -2239,7 +2278,7 @@ class HorndeskiModel(StandardModel):
                 self.newton_tol = newton_tol
 
                 self._run_solver_ODE_HG(
-                    phi_ini, phi_prime_ini,
+                    E_ini, phi_ini, phi_prime_ini,
                     method=method, timeout=timeout, 
                     store_hat=store_hat
                 )
