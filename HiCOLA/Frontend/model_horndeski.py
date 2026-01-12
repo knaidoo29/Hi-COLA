@@ -1,5 +1,4 @@
 import numpy as np
-import time
 import sympy as sym
 from scipy.optimize import newton
 
@@ -359,7 +358,6 @@ class HorndeskiModel(StandardModel):
         self.symfunc['fried_closure'] += self.sym['rho_b'] + self.sym['rho_c'] + self.sym['rho_l']
         self.symfunc['fried_closure'] += self.symfunc['rho_phi']
         self.symfunc['fried_closure'] -= self.sym['E']**2
-        # self.symfunc['fried_closure'] /= self.sym['E']**2
 
 
     def get_G_G_4(self):
@@ -622,7 +620,7 @@ class HorndeskiModel(StandardModel):
         self.symfunc['tilde_calP'] /= self.symfunc['M_star_sq']
 
 
-    # # Stability and sound speed related functions
+    # Stability and sound speed related functions
 
     def get_Q_s(self):
         """
@@ -1020,7 +1018,7 @@ class HorndeskiModel(StandardModel):
                 print(' - Done!')
     
 
-    def set_cosmo_params(self, H0_ref, Omega_c0_ref, Omega_b0_ref, fphi, K_G3_G4_values, w0=-1., wa=0., Tcmb=2.7255, Tnu0=1.9518, mnu=[0.,0.,0.], Neff=3.044):
+    def set_cosmo_params(self, H0_ref, Omega_c0_ref, Omega_b0_ref, fphi, K_G3_G4_values, w0=-1., wa=0., Tcmb=2.7255, Tnu0=1.9518, mnu=[], Neff=3.044):
         """
         Set cosmological and Horndeski parameters.
 
