@@ -17,7 +17,6 @@ class CubicGalileon(HorndeskiModel):
         self.define_K('k_1*X', 'k_1')
         self.define_G3('g_31*X', 'g_31')
         self.define_G4('0.5', None)
-        self.construct_model()
     
     
     def set_cosmo_params(
@@ -75,9 +74,9 @@ class CubicGalileon(HorndeskiModel):
         self.params['wa'] = wa
 
         Omega_g0_ref = self.params['Omega_g0_ref']
-        Omega_n0_ref = self.params['Omega_nu_ur0_ref'] + self.params['Omega_nu_nr0_ref']
+        Omega_n0_ref = self.params['Omega_nu_ur0_ref']
         Omega_r0_ref = Omega_g0_ref + Omega_n0_ref
-        Omega_m0_ref =  self.params['Omega_c0_ref'] + self.params['Omega_b0_ref']
+        Omega_m0_ref =  self.params['Omega_c0_ref'] + self.params['Omega_b0_ref'] + self.params['Omega_nu_nr0_ref']
 
         k1_Tracker = 6*fphi*(Omega_r0_ref+Omega_m0_ref-1)
         g31_Tracker = 2*fphi*(1-Omega_r0_ref-Omega_m0_ref)

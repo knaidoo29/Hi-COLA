@@ -11,8 +11,5 @@ from .Frontend.model_horndeski import HorndeskiModel
 # Cubic Galileon model
 from .Frontend.model_cubic_galileon import CubicGalileon
 
-# Likelihood function
-from .Frontend.likelihood import Likelihood
-
 # MCMC sampler
 from .Frontend.sampler import Sampler

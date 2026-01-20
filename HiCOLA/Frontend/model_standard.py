@@ -238,6 +238,133 @@ class StandardModel:
         self.const['C_nu'] = (8 * self.const['G[eV]'] * (self.params['Tnu0'] * self.const['kB[eV]'])**4)/(3.*(self.const['H0unit[eV]']**2)*np.pi)
     
 
+    def get_Iy(self, x, y):
+        """
+        Neutrino integral relation.
+
+        Parameters
+        ----------
+        x : float or array
+            The integral axis value.
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        
+        Returns
+        -------
+        f : float or array
+            Integral function value.
+        """
+        f = (x**2)*np.sqrt(x**2 + y**2) * np.exp(-x) / (1 + np.exp(-x))
+        return f
+
+
+    def get_Iy_prime(self, x, y):
+        """
+        The derivative of the neutrino integral relation.
+
+        Parameters
+        ----------
+        x : float or array
+            The integral axis value.
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        
+        Returns
+        -------
+        f : float or array
+            Integral function value.
+        """
+        f = ((y**2)*(x**2)/np.sqrt(x**2 + y**2)) * np.exp(-x) / (1 + np.exp(-x))
+        return f
+    
+
+    def get_Jy(self, x, y):
+        """
+        The neutrino integral relation for pressure.
+
+        Parameters
+        ----------
+        x : float or array
+            The integral axis value.
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        
+        Returns
+        -------
+        f : float or array
+            Integral function value.
+        """
+        f = ((x**4)/np.sqrt(x**2 + y**2)) * np.exp(-x) / (1 + np.exp(-x))
+        return f
+    
+
+    def _Iy_asymp_low(self, y):
+        """
+        Neutrino integral asymptotic value for low y.
+
+        Parameters
+        ----------
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        """
+        return 7*(np.pi**4)/120
+    
+    def _Iy_asymp_high(self, y):
+        """
+        Neutrino integral asymptotic value for high y.
+
+        Parameters
+        ----------
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        """
+        return 3*y*self.const['riemann_zeta3']/2
+    
+    def _Iy_prime_asymp_low(self, y):
+        """
+        Neutrino derivative asymptotic value for low y.
+
+        Parameters
+        ----------
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        """
+        return (np.pi**2) * (y**2) / 12
+        
+    def _Iy_prime_asymp_high(self, y):
+        """
+        Neutrino derivative asymptotic value for high y.
+
+        Parameters
+        ----------
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        """
+        return 3*y*self.const['riemann_zeta3']/2
+    
+    def _Jy_asymp_low(self, y):
+        """
+        Neutrino function J, related to the neutrino pressure, asymptotic value for low y.
+
+        Parameters
+        ----------
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        """
+        return 7*(np.pi**4)/120
+    
+    def _Jy_asymp_high(self, y):
+        """
+        Neutrino function J, related to the neutrino pressure, asymptotic value for low y.
+
+        Parameters
+        ----------
+        y : float or array
+            Equivalent to a*mnu/Tnu0.
+        """
+        return 45*self.const['riemann_zeta5']/(2*y)
+
+    
     def _tabulate_IJy(self):
         """
         Construct tabulated and interpolation function for Iy and Iy_prime used to compute neutrino density evolution.
@@ -247,28 +374,16 @@ class StandardModel:
         from scipy.interpolate import interp1d
 
         self.neutrino_table = {}
-
-        def get_Iy(x, y):
-            f = (x**2)*np.sqrt(x**2 + y**2) * np.exp(-x) / (1 + np.exp(-x))
-            return f
-
-        def get_Iy_prime(x, y):
-            f = ((y**2)*(x**2)/np.sqrt(x**2 + y**2)) * np.exp(-x) / (1 + np.exp(-x))
-            return f
-        
-        def get_Jy(x, y):
-            f = ((x**4)/np.sqrt(x**2 + y**2)) * np.exp(-x) / (1 + np.exp(-x))
-            return f
         
         y = np.logspace(-1, 2, 100)
         ymin = y.min()
         ymax = y.max()
 
-        Iy = np.array([quad(get_Iy, 0., np.inf, args=(_y))[0] for _y in y])
+        Iy = np.array([quad(self.get_Iy, 0., np.inf, args=(_y))[0] for _y in y])
 
-        Iy_prime = np.array([quad(get_Iy_prime, 0., np.inf, args=(_y))[0] for _y in y])
+        Iy_prime = np.array([quad(self.get_Iy_prime, 0., np.inf, args=(_y))[0] for _y in y])
 
-        Jy = np.array([quad(get_Jy, 0., np.inf, args=(_y))[0] for _y in y])
+        Jy = np.array([quad(self.get_Jy, 0., np.inf, args=(_y))[0] for _y in y])
 
         self.neutrino_table['y'] = y
         self.neutrino_table['ymin'] = ymin
@@ -279,36 +394,15 @@ class StandardModel:
         self.neutrino_table['Iy_interp'] = interp1d(self.neutrino_table['y'], self.neutrino_table['Iy'], kind='cubic')
         self.neutrino_table['Iy_prime_interp'] = interp1d(self.neutrino_table['y'], self.neutrino_table['Iy_prime'], kind='cubic')
         self.neutrino_table['Jy_interp'] = interp1d(self.neutrino_table['y'], self.neutrino_table['Jy'], kind='cubic')
-
-        def Iy_asymp_low(y):
-            return 7*(np.pi**4)/120
         
-        self.neutrino_table['Iy_interp_low'] = Iy_asymp_low
-
-        def Iy_asymp_high(y):
-            return 3*y*self.const['riemann_zeta3']/2
+        self.neutrino_table['Iy_interp_low'] = self._Iy_asymp_low
+        self.neutrino_table['Iy_interp_high'] = self._Iy_asymp_high
         
-        self.neutrino_table['Iy_interp_high'] = Iy_asymp_high
-
-        def Iy_prime_asymp_low(y):
-            return (np.pi**2) * (y**2) / 12
+        self.neutrino_table['Iy_prime_interp_low'] = self._Iy_prime_asymp_low
+        self.neutrino_table['Iy_prime_interp_high'] = self._Iy_prime_asymp_high
         
-        self.neutrino_table['Iy_prime_interp_low'] = Iy_prime_asymp_low
-
-        def Iy_prime_asymp_high(y):
-            return 3*y*self.const['riemann_zeta3']/2
-        
-        self.neutrino_table['Iy_prime_interp_high'] = Iy_prime_asymp_high
-
-        def Jy_asymp_low(y):
-            return 7*(np.pi**4)/120
-        
-        self.neutrino_table['Jy_interp_low'] = Jy_asymp_low
-
-        def Jy_asymp_high(y):
-            return 45*self.const['riemann_zeta5']/(2*y)
-        
-        self.neutrino_table['Jy_interp_high'] = Jy_asymp_high
+        self.neutrino_table['Jy_interp_low'] = self._Jy_asymp_low
+        self.neutrino_table['Jy_interp_high'] = self._Jy_asymp_high
 
 
     def get_rho_nu_nr(self, a, h, mnu):
@@ -331,7 +425,8 @@ class StandardModel:
         """
         if self.neutrino_table is None:
             self._tabulate_IJy()
-        y = a * mnu / (self.params['Tnu0']*self.const['kB[eV]'])
+        sign = np.sign(mnu)
+        y = a * abs(mnu) / (self.params['Tnu0']*self.const['kB[eV]'])
         if utils.isscalar(y):
             if y <= self.neutrino_table['ymin']:
                 rho_nu_nr = self.neutrino_table['Iy_interp_low'](y)
@@ -347,7 +442,7 @@ class StandardModel:
             rho_nu_nr[cond] = self.neutrino_table['Iy_interp_high'](y[cond])
             cond = np.where((y > self.neutrino_table['ymin']) & (y < self.neutrino_table['ymax']))[0]
             rho_nu_nr[cond] = self.neutrino_table['Iy_interp'](y[cond])
-        rho_nu_nr *= self.const['C_nu']/((h**2) * (a**4))
+        rho_nu_nr *= sign*self.const['C_nu']/((h**2) * (a**4))
         return rho_nu_nr
     
     
@@ -370,7 +465,8 @@ class StandardModel:
             Neutrino density derivative wrt log a.
         """
         rho_nu_nr_prime = -4*self.get_rho_nu_nr(a, h, mnu)
-        y = a * mnu / (self.params['Tnu0']*self.const['kB[eV]'])
+        sign = np.sign(mnu)
+        y = a * abs(mnu) / (self.params['Tnu0']*self.const['kB[eV]'])
         if utils.isscalar(y):
             if y <= self.neutrino_table['ymin']:
                 _rho_nu_nr_prime = self.neutrino_table['Iy_prime_interp_low'](y)
@@ -387,7 +483,7 @@ class StandardModel:
             cond = np.where((y > self.neutrino_table['ymin']) & (y < self.neutrino_table['ymax']))[0]
             _rho_nu_nr_prime[cond] = self.neutrino_table['Iy_prime_interp'](y[cond])
         _rho_nu_nr_prime *= self.const['C_nu']/((h**2) * (a**4))
-        rho_nu_nr_prime += _rho_nu_nr_prime
+        rho_nu_nr_prime += sign*_rho_nu_nr_prime
         return rho_nu_nr_prime
     
     
@@ -440,7 +536,8 @@ class StandardModel:
         """
         E_prime_E = E_prime/E
         Omega_nu_nr_prime = -(4 + 2*E_prime_E)*Omega_nu_nr
-        y = a * mnu / (self.params['Tnu0']*self.const['kB[eV]'])
+        sign = np.sign(mnu)
+        y = a * abs(mnu) / (self.params['Tnu0']*self.const['kB[eV]'])
         if utils.isscalar(y):
             if y <= self.neutrino_table['ymin']:
                 _Omega_nu_nr_prime = self.neutrino_table['Iy_prime_interp_low'](y)
@@ -456,7 +553,7 @@ class StandardModel:
             _Omega_nu_nr_prime[cond] = self.neutrino_table['Iy_prime_interp_high'](y[cond])
             cond = np.where((y > self.neutrino_table['ymin']) & (y < self.neutrino_table['ymax']))[0]
             _Omega_nu_nr_prime[cond] = self.neutrino_table['Iy_prime_interp'](y[cond])
-        _Omega_nu_nr_prime *= self.const['C_nu']/((h**2) * (E**2) * (a**4))
+        _Omega_nu_nr_prime *= sign*self.const['C_nu']/((h**2) * (E**2) * (a**4))
         Omega_nu_nr_prime += _Omega_nu_nr_prime
         return Omega_nu_nr_prime
     
@@ -477,7 +574,7 @@ class StandardModel:
         w_nu : float or array
             Massive neutrino equation of state.
         """
-        y = a * mnu / (self.params['Tnu0']*self.const['kB[eV]'])
+        y = a * abs(mnu) / (self.params['Tnu0']*self.const['kB[eV]'])
         if utils.isscalar(y):
             if y <= self.neutrino_table['ymin']:
                 w_nu_nr = self.neutrino_table['Jy_interp_low'](y)/(3*self.neutrino_table['Iy_interp_low'](y))
@@ -800,7 +897,7 @@ class StandardModel:
         return E_prime
 
 
-    def set_cosmo_params(self, H0_ref, Omega_c0_ref, Omega_b0_ref, w0=-1., wa=0., Tcmb=2.7255, Tnu0=1.9518, mnu=[0.,0.,0.], Neff=3.04):
+    def set_cosmo_params(self, H0_ref, Omega_c0_ref, Omega_b0_ref, w0=-1., wa=0., Tcmb=2.7255, Tnu0=1.9518, mnu=[], Neff=3.04):
         """
         Set cosmological parameters.
 
@@ -1000,12 +1097,15 @@ class StandardModel:
                     D_ini = self.output['a'][0]
                     dD_ini = self.output['a'][0]
                     y_ini = [D_ini, dD_ini]
-
+                    
                     # End position
                     x_final = self.output['x'][-1]
                     
                     # Solve forward
-                    ans = solve_ivp(self._linear_growth, (x_ini, x_final), y_ini, t_eval=self.output['x'], args=(self.output['Omega_c0']+self.output['Omega_b0'],))
+                    ans = solve_ivp(
+                        self._linear_growth, (x_ini, x_final), y_ini, t_eval=self.output['x'], 
+                        args=(self.output['Omega_c0']+self.output['Omega_b0']+self.output['Omega_nu_nr0'],)
+                    )
                         
                     # Combine solutions
                     _D1 = ans.y[0]
@@ -1058,7 +1158,10 @@ class StandardModel:
                         x_final = self.output['x'][-1]
                         
                         # Solve forward
-                        ans = solve_ivp(self._linear_growth, (x_ini, x_final), y_ini, t_eval=self.output['x'], args=(self.output['Omega_c0'][idx]+self.output['Omega_b0'][idx],))
+                        ans = solve_ivp(
+                            self._linear_growth, (x_ini, x_final), y_ini, t_eval=self.output['x'], 
+                            args=(self.output['Omega_c0'][idx]+self.output['Omega_b0'][idx]+self.output['Omega_nu_nr0'][idx],)
+                        )
                             
                         # Combine solutions
                         _D1 = ans.y[0]
@@ -1164,7 +1267,10 @@ class StandardModel:
                     x_final = self.output['x'][-1]
                     
                     # Solve forward
-                    ans = solve_ivp(self._linear_growth_2, (x_ini, x_final), y_ini, t_eval=self.output['x'], args=(self.output['Omega_c0']+self.output['Omega_b0'],))
+                    ans = solve_ivp(self._linear_growth_2, (
+                        x_ini, x_final), y_ini, t_eval=self.output['x'], 
+                        args=(self.output['Omega_c0']+self.output['Omega_b0']+self.output['Omega_nu_nr0'],)
+                    )
                         
                     # Combine solutions
                     _D2 = ans.y[0]
@@ -1214,7 +1320,10 @@ class StandardModel:
                         x_final = self.output['x'][-1]
                         
                         # Solve forward
-                        ans = solve_ivp(self._linear_growth_2, (x_ini, x_final), y_ini, t_eval=self.output['x'], args=(self.output['Omega_c0'][idx]+self.output['Omega_b0'][idx],))
+                        ans = solve_ivp(
+                            self._linear_growth_2, (x_ini, x_final), y_ini, t_eval=self.output['x'], 
+                            args=(self.output['Omega_c0'][idx]+self.output['Omega_b0'][idx]+self.output['Omega_nu_nr0'][idx],)
+                        )
                             
                         # Combine solutions
                         _D2 = ans.y[0]
@@ -1421,7 +1530,7 @@ class StandardModel:
                     # w_bc = (self.output['Omega_b0'][idx] + self.output['Omega_c0'][idx])*(1e-2*self.output['H0'][idx])**2
                     # a_eq[idx] = 2.35*1e-5*Theta27**4
                     # a_eq[idx] /= w_bc*(1-fnu)
-
+                    
                     a_eq[idx] = 1 + self.params['Neff']*(7/8)*(4/11)**(4/3)
                     a_eq[idx] *= self.const['C_gamma']
                     a_eq[idx] /= (self.output['Omega_b0'][idx] + self.output['Omega_c0'][idx])*(1e-2*self.output['H0'][idx])**2
@@ -1452,6 +1561,7 @@ class StandardModel:
                     # Correcting bias in Hu & Sugiyama near the Planck prior, applicable for models where the early universe follows LCDM very closely
                     # The correction corrects a bias from camb z_star vs the Hu & Sugiyama approximation assuming the bias is a linear function of w_b
                     z_star += 91.95*w_b - 3.9896
+                    # z_star -= 1.9340459
                 
             else:
 
@@ -1470,7 +1580,9 @@ class StandardModel:
                         # Correcting bias in Hu & Sugiyama near the Planck prior, applicable for models where the early universe follows LCDM very closely
                         # The correction corrects a bias from camb z_star vs the Hu & Sugiyama approximation assuming the bias is a linear function of w_b
                         z_star[idx] += 91.95*w_b - 3.9896
-
+                        # z_star[idx] -= 1.9340459
+        
+        self.output['z_star'] = z_star
         self.output['a_star'] = redshift.z2a(z_star)
     
 
@@ -1497,9 +1609,9 @@ class StandardModel:
                 R_eq = (3/4)*self.get_rho_b(self.output['a_eq'], self.output['Omega_b0'])
                 R_eq /= self.get_rho_g(self.output['a_eq'], self.output['H0']*1e-2)
 
-                ## Hu & Sugiyama approximation for R_eq is below, we use the more accurate form above.
+                # Hu & Sugiyama approximation for R_eq is below, we use the more accurate form above.
                 # w_b = self.output['Omega_b0']*(1e-2*self.output['H0'])**2
-                # Theta27 = 2.726/2.7
+                # Theta27 = self.params['Tcmb0']/2.7
                 # R = 31.5*w_b*(Theta27**-4)*1e3/redshift.a2z(self.output['a_star'])
                 # R_eq = 31.5*w_b*(Theta27**-4)*1e3/redshift.a2z(self.output['a_eq'])
 
@@ -1525,9 +1637,9 @@ class StandardModel:
                     R_eq = (3/4)*self.get_rho_b(self.output['a_eq'][idx], self.output['Omega_b0'][idx])
                     R_eq /= self.get_rho_g(self.output['a_eq'][idx], self.output['H0'][idx]*1e-2)
 
-                    ## Hu & Sugiyama approximation for R_eq is below, we use the more accurate form above.
+                    # Hu & Sugiyama approximation for R_eq is below, we use the more accurate form above.
                     # w_b = self.output['Omega_b0'][idx]*(1e-2*self.output['H0'][idx])**2
-                    # Theta27 = 2.726/2.7
+                    # Theta27 = self.params['Tcmb0']/2.7
                     # R = 31.5*w_b*(Theta27**-4)*1e3/redshift.a2z(self.output['a_star'][idx])
                     # R_eq = 31.5*w_b*(Theta27**-4)*1e3/redshift.a2z(self.output['a_eq'][idx])
 
@@ -1535,8 +1647,6 @@ class StandardModel:
                     r_star[idx] /= np.sqrt(Omega_bc*H0**2)
                     r_star[idx] *= np.sqrt(self.output['a_eq'][idx]/R_eq)
                     r_star[idx] *= np.log((np.sqrt(1+R) + np.sqrt(R+R_eq))/(1+np.sqrt(R_eq)))
-                    
-                    
 
         self.output['r_star'] = r_star
 
@@ -1620,6 +1730,7 @@ class StandardModel:
         self.params['Omega_l0'] = self.params['Omega_l0_LCDM']
         self.params['Omega_nu_ur0'] = self.params['Omega_nu_ur0_ref']
         self.params['Omega_nu_nr0'] = self.params['Omega_nu_nr0_ref']
+        self.output['fphi0'] = 0.
 
         self.output['success'] = True
         self.output['solver_success'] = True
@@ -1764,6 +1875,8 @@ class StandardModel:
         self.output['Q_s'] = Q_s_arr
         self.output['c_s_sq_D'] = c_s_sq_D_arr
         self.output['c_s_sq'] = c_s_sq_arr
+        self.output['c_s_sq_gt_0'] = None
+        self.output['Q_s_gt_0'] = None
         self.output['f_MG'] = f_MG_arr
         self.output['stable'] = stable            
     
