@@ -1260,6 +1260,14 @@ class HorndeskiModel(StandardModel):
 
         return E
     
+
+    def _failure_event(self, t, y, timeout):
+        """
+        Failure event to gracefully exit solve_ivp when
+        """
+        return 1.0 if getattr(self, "_ode_failed", False) else -1.0
+
+
     def _compute_primes(self, x, Y, timeout=5):
         """
         Compute prime functions for numerical solver.
@@ -1274,6 +1282,7 @@ class HorndeskiModel(StandardModel):
             Time in seconds to force the solver to fail.
         """
         try:
+
             # convert x = log(a) to scale factor
             a = np.exp(x)
 
@@ -1291,18 +1300,16 @@ class HorndeskiModel(StandardModel):
             timenow = self._check_timer()
 
             if timenow >= timeout:
-                E_prime = np.nan
-                phi_prime = np.nan
-                phi_primeprime = np.nan
-
+                raise RuntimeError("Integration timeout reached")
+            
             if np.isfinite([E_prime, phi_prime, phi_primeprime]).all() == False:
                 self._solver_success = False
             
             return [E_prime, phi_prime, phi_primeprime]
         
         except RuntimeError:
-            # Signal RK45 that this step is invalid
-            return np.full_like(Y, np.nan)
+            self._ode_failed = True
+            return [0., 0., 0.]  # dummy but finite, allows the solver to gracefully exit.
     
 
     # Numerically computed quantities
@@ -1704,9 +1711,7 @@ class HorndeskiModel(StandardModel):
     
 
     def _run_solver_ODE_HG(
-            self, 
-            E_ini, 
-            phi_ini, phi_prime_ini, method='RK45', timeout=5, store_hat=False
+            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False
         ):
         """
         Returns the Horndeski solver outputs.
@@ -1817,10 +1822,15 @@ class HorndeskiModel(StandardModel):
                 self._start_timer()
                 
                 solution = solve_ivp(
-                    self._compute_primes, [x_ini, x_final], Y_ini, t_eval=x_arr, method=method, 
+                    self._compute_primes, 
+                    [x_ini, x_final], 
+                    Y_ini, 
+                    t_eval=x_arr, 
+                    method=method, 
                     args=(timeout,),
                     rtol = 1e-8,
-                    max_step=(x_arr[1]-x_arr[0])
+                    max_step=(x_arr[1]-x_arr[0]),
+                    events=self._failure_event,
                 )
                 
                 solver_success[idx] = self._solver_success
@@ -1846,8 +1856,12 @@ class HorndeskiModel(StandardModel):
 
                     variables = self._get_variables(a, _E_arr[i], _phi_arr[i], _phi_prime_arr[i], E_newton=True)
 
-                    _E_arr[i] = self._solve4E(variables, _E_arr[i])
+                    try:
+                        _E_arr[i] = self._solve4E(variables, _E_arr[i])
 
+                    except RuntimeError:
+                        _E_arr[i] = np.nan
+                    
                     _rho_g_arr[i] = variables[2]
                     _rho_b_arr[i] = variables[3]
                     _rho_c_arr[i] = variables[4]
@@ -2222,7 +2236,6 @@ class HorndeskiModel(StandardModel):
                     Q_s_gt_0[idx] = True
                 else:
                     Q_s_gt_0[idx] = False
-                
 
                 if Q_s_arr.all() > 0 and c_s_sq_arr.all() > 0: #and f_MG_arr.all() <= 1:
                     stable[idx] = True
@@ -2276,7 +2289,7 @@ class HorndeskiModel(StandardModel):
 
     def run_solver(
             self, z_max=1200., Npoints=1000, forwards=True, GR=False, variable1=1, variable2=None, 
-            phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=5, newton_tol=1e-5,
+            phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=1, newton_tol=1e-5,
             derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True
         ):
         """

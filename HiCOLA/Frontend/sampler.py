@@ -36,9 +36,12 @@ class Sampler():
         self.verbose = True
         self.derived_keys = [
             'H0', 
+            'Omega_g0', 
             'Omega_b0', 
             'Omega_c0', 
-            'Omega_l0', 
+            'Omega_l0',
+            'Omega_nu_ur0',
+            'Omega_nu_nr0',
             'fphi0',
             'z_star', 
             'r_star', 
@@ -49,9 +52,12 @@ class Sampler():
         ]
         self.derived_labels = [
             r'H_{0}', 
+            r'\Omega_{g,0}', 
             r'\Omega_{b,0}', 
             r'\Omega_{c,0}', 
             r'\Omega_{\Lambda,0}', 
+            r'\Omega_{\nu,0}^{\mathrm{UR}}', 
+            r'\Omega_{\nu,0}^{\mathrm{NR}}', 
             r'f_{\phi,0}',
             r'z_{*}', 
             r'r_{*}', 
@@ -1056,7 +1062,6 @@ class Sampler():
         chit2 = delta @ self.inv_cov_DES_SN_Dovekie @ delta.T
         B = np.sum(delta @ self.inv_cov_DES_SN_Dovekie)
         chi2 = chit2 - (B**2 / self.C_DES_SN_Dovekie)
-
         loglike = -0.5*self.log_norm_DES_SN_Dovekie - 0.5*chi2
         return loglike
 
@@ -1393,17 +1398,52 @@ class Sampler():
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges
             )
     
-    
-    def convert2MCSamples(self, fname=None, derived=False, derived_limits=[['fphi0', [0., 1.]]]):
+
+    def add2dict(self, sample_dict, param, chain, label, ranges=None):
         """
-        Converts sample chains into the getdist MCSamples object.
+        Add parameter chains to the dictionary.
+        
+        Parameters
+        ----------
+        sample_dict : list
+            Sample dictionary with parameter chains, labels and priors.
+        param : str
+            Parameter name.
+        chain : array
+            Parameter chain.
+        label : str
+            Parameter label.
+        ranges : list, optional
+            Minimum and maximum ranges for the parameter being added, can be set to None.
+        """
+        assert len(sample_dict['weights']) == len(chain), 'New chain must match dimension of original weights.'
+        assert param not in sample_dict.keys(), 'New parameter already exists in sample dictionary.'
+        _dict = {}
+        _dict['chains'] = chain
+        _dict['label'] = label
+        _dict['prior'] = ranges
+        sample_dict[param] = _dict
+        return sample_dict
+    
+
+    def sample2dict(self, fname=None, derived=True, derived_limits=[['fphi0', [0., 1.]]]):
+        """
+        Construct dictionary for samples.
 
         Parameters
         ----------
         fname : str
             To load samples from a file.
+        derived : bool
+            Whether to include derived data products.
+        derived_limits : list
+            List of limits for derived parameters, only specify those with boundaries.
+        
+        Returns
+        -------
+        sample_dict : dict
+            Sample dictionary with parameter chains, labels and priors.
         """
-        from getdist import MCSamples
 
         if fname is None:
             samples, weights = self.samples, self.weights
@@ -1414,41 +1454,111 @@ class Sampler():
             weights = data['weights']
             param_names = list(data['param_names'])
             param_labels = list(data['param_labels'])
-            param_ranges = data['param_ranges']
+            param_ranges = list(data['param_ranges'])
+        
         ranges_dict = {}
         for (i, param) in enumerate(param_names):
             ranges_dict[param] = param_ranges[i]
-        if fname is None:
-            if derived:
+
+        if derived:
+            
+            for i in range(0, len(derived_limits)):
+                ranges_dict[derived_limits[i][0]] = derived_limits[i][1]
+            
+            if fname is None:
                 blob = self.blob
                 samples = np.column_stack([samples, blob])
                 param_names += self.derived_keys
                 param_labels += self.derived_labels
-        else:
-            data = np.load(fname + '_chains.npz')
-            if derived:
+
+            else:
+                data = np.load(fname + '_chains.npz')
                 blob = data['blob']
                 samples = np.column_stack([samples, blob])
                 param_names += list(data['derived_keys'])
                 param_labels += list(data['derived_labels'])
-        if derived:
-            for i in range(0, len(derived_limits)):
-                ranges_dict[derived_limits[i][0]] = derived_limits[i][1]
-        return MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict)
+            
+            for param in list(data['derived_keys']):
+                if param in ranges_dict.keys():
+                    param_ranges.append(ranges_dict[param])
+                else:
+                    param_ranges.append(None)
+
+        sample_dict = {}
+        sample_dict['weights'] = weights
+        for (i, param) in enumerate(param_names):
+            sample_dict = self.add2dict(sample_dict, param, samples[:,i], param_labels[i], param_ranges[i])
+        
+        return sample_dict
     
 
-    def quickplot(self, derived=False):
+    def sample2MCSamples(self, sample_dict=None, fname=None, derived=False, derived_limits=[['fphi0', [0., 1.]]]):
+        """
+        Converts sample chains into the getdist MCSamples object.
+
+        Parameters
+        ----------
+        sample_dict : dict
+            Sample dictionary with parameter chains, labels and priors.
+        fname : str
+            To load samples from a file.
+        derived : bool
+            Whether to include derived data products.
+        derived_limits : list
+            List of limits for derived parameters, only specify those with boundaries.
+        
+        Yeild
+        -----
+        Returns the MCSamples object for a given chain sample.
+        """
+        from getdist import MCSamples
+
+        if sample_dict is None:
+            sample_dict = self.sample2dict(fname=fname, derived=derived, derived_limits=derived_limits)
+        
+        weights = sample_dict['weights']
+        param_names = []
+        param_labels = []
+        samples = []
+        ranges_dict = {}
+
+        for param in sample_dict.keys():
+            if param != 'weights':
+                param_names.append(param)
+                param_labels.append(sample_dict[param]['label'])
+                samples.append(sample_dict[param]['chains'])
+                if sample_dict[param]['prior'] is not None:
+                    ranges_dict[param] = sample_dict[param]['prior']
+
+        return MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict)
+    
+    
+    def quickplot(self, sample_dict=None, fname=None, derived=False, params=None):
         """
         Quickly plots parameter constraints using getdist.
+
+        Parameters
+        ----------
+        sample_dict : dict
+            Sample dictionary with parameter chains, labels and priors.
+        fname : str
+            To load samples from a file.
+        derived : bool
+            Whether to include derived data products.
+        params : list, optional
+            List of parameters to plot.
         """
 
         import matplotlib.pylab as plt
         from getdist import plots
 
-        chains = self.convert2MCSamples(derived=derived)
+        chains = self.sample2MCSamples(sample_dict=sample_dict, fname=fname, derived=derived)
 
         g = plots.get_subplot_plotter()
-        g.triangle_plot([chains], filled=True, title_limit=1)
+        if params is None:
+            g.triangle_plot([chains], filled=True, title_limit=1)
+        else:
+            g.triangle_plot([chains], params, filled=True, title_limit=1)
 
 
     def clean(self):
