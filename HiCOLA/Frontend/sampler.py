@@ -3,7 +3,7 @@ import sympy as sym
 
 from scipy.interpolate import interp1d
 
-from . import redshift, utils
+from . import redshift
 
 from .model_standard import StandardModel
 from .model_horndeski import HorndeskiModel
@@ -67,6 +67,7 @@ class Sampler():
             r'Q_{s}>0'
         ]
 
+
     # Setup the sampler
 
     def _check_param_settings(self, param):
@@ -106,8 +107,8 @@ class Sampler():
 
         self.settings = settings
 
-        if self.settings['sampler'] == 'dynasty':
-            self.sampler_method = 'dynasty'
+        if self.settings['sampler'] in ['dynasty', 'emcee', 'pocoMC']:
+            self.sampler_method = self.settings['sampler']
         else:
             assert False, "Unknown sampler %s." % self.settings['sampler']
         
@@ -233,27 +234,43 @@ class Sampler():
         for param in self.varied_params: 
             self.varied_idx2param[self.varied_param2idx[param]] = param
 
+        # Store prior ranges
+        self.init_value = np.array([self.varied_params[self.varied_idx2param[i]]['init'] for i in range(0, self.Nvaried)])
+        self.prior_min = np.array([self.varied_params[self.varied_idx2param[i]]['prior'][0] for i in range(0, self.Nvaried)])
+        self.prior_max = np.array([self.varied_params[self.varied_idx2param[i]]['prior'][1] for i in range(0, self.Nvaried)])
+    
         # Constraints information
 
         self.constraints = []
         allowed_constraints = [
-            'Planck', 'H0',
+            'Planck', 'H0_LOCAL_ALL', 'H0_LOCAL_SHOES', 'H0_LOCAL_MCP', 'H0_LOCAL_TRGB', 'H0_LOCAL_Type2SN',
             'DESI_DR2_BAO_FULL', 'DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2',
             'DESI_DR2_BAO_LRG_ELG', 'DESI_DR2_BAO_ELG', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA',
             'DES_SN_Dovekie'
         ]
         self.constraint2idx = {}
 
-        for constraints in self.settings['constraints']:
-            assert constraints in allowed_constraints, "Constraint %s not supported." % constraints
-            if constraints == 'DESI_DR2_BAO_FULL':
+        self.likelihood_switch = {
+        }
+        for constraint in allowed_constraints:
+            self.likelihood_switch[constraint] = False
+
+        for constraint in self.settings['constraints']:
+            assert constraint in allowed_constraints, "Constraint %s not supported." % constraint
+            if constraint == 'H0_LOCAL_ALL':
+                for H0_LOCAL in ['H0_LOCAL_SHOES', 'H0_LOCAL_MCP', 'H0_LOCAL_TRGB', 'H0_LOCAL_Type2SN']:
+                    if H0_LOCAL in self.settings['constraints']:
+                        assert False, "If H0_LOCAL_ALL specified do not include %s" % H0_LOCAL
+                
+            if constraint == 'DESI_DR2_BAO_FULL':
                 for BAO in ['DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2','DESI_DR2_BAO_LRG_ELG', 'DESI_DR2_BAO_ELG', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA']:
                     if BAO in self.settings['constraints']:
                         assert False, "If DESI_DR2_BAO_FULL specified do not include %s" % BAO
-            self.constraints.append(constraints)
+            self.likelihood_switch[constraint] = True
+            self.constraints.append(constraint)
         
-        for (i, constraints) in enumerate(self.settings['constraints']):
-            self.constraint2idx[constraints] = i
+        for (i, constraint) in enumerate(self.settings['constraints']):
+            self.constraint2idx[constraint] = i
 
         assert 'fname' in self.settings, "Must define fname for outputs."
         self.fname = self.settings['fname']
@@ -432,8 +449,7 @@ class Sampler():
         else:
             self.model.run_solver(
                 z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value,
-                variable1=self.solver['variable1'], phi_ini=phi_ini_value,
-                variable2=self.solver['variable2'], phi_prime_ini=phi_prime_ini_value
+                variable1=self.solver['variable1'], phi_ini=phi_ini_value, variable2=self.solver['variable2'], phi_prime_ini=phi_prime_ini_value
             )
     
     
@@ -561,7 +577,10 @@ class Sampler():
         # Type II SN
         self.Type2SN_H0 = 74.9 
         self.Type2SN_H0_err = 2.7
-        self.log_norm_H0 = np.log(2*np.pi*(self.SHOES_H0_err**2 + self.MCP_H0_err**2 + self.TRGB_H0_err**2 + self.Type2SN_H0_err**2))
+        self.log_norm_H0_SHOES = np.log(2*np.pi*self.SHOES_H0_err**2)
+        self.log_norm_H0_MCP = np.log(2*np.pi*self.MCP_H0_err**2)
+        self.log_norm_H0_TRGB = np.log(2*np.pi*self.TRGB_H0_err**2)
+        self.log_norm_H0_Type2SN = np.log(2*np.pi*self.Type2SN_H0_err**2)
 
 
     def theory_H0(self, root=0):
@@ -574,9 +593,9 @@ class Sampler():
             return self.model.output['H0'][root]
 
 
-    def loglike_H0(self, theory):
+    def loglike_H0_LOCAL_SHOES(self, theory):
         """
-        Computes the H0 likelihood.
+        Computes the H0 likelihood for SHOES measurements.
 
         Parameters
         ----------
@@ -589,10 +608,64 @@ class Sampler():
             H0 log likelihood values.
         """
         chi2 = ((theory - self.SHOES_H0)/self.SHOES_H0_err)**2
-        chi2 += ((theory - self.MCP_H0)/self.MCP_H0_err)**2
-        chi2 += ((theory - self.TRGB_H0)/self.TRGB_H0_err)**2
-        chi2 += ((theory - self.Type2SN_H0)/self.Type2SN_H0_err)**2
-        loglike = -0.5*self.log_norm_H0  - 0.5*chi2
+        loglike = -0.5*self.log_norm_H0_SHOES  - 0.5*chi2
+        return loglike
+    
+
+    def loglike_H0_LOCAL_MCP(self, theory):
+        """
+        Computes the H0 likelihood for SHOES measurements.
+
+        Parameters
+        ----------
+        theory : array
+            Theoretical predictions for H0.
+
+        Returns
+        -------
+        loglike : float
+            H0 log likelihood values.
+        """
+        chi2 = ((theory - self.MCP_H0)/self.MCP_H0_err)**2
+        loglike = -0.5*self.log_norm_H0_MCP  - 0.5*chi2
+        return loglike
+    
+
+    def loglike_H0_LOCAL_TRGB(self, theory):
+        """
+        Computes the H0 likelihood for SHOES measurements.
+
+        Parameters
+        ----------
+        theory : array
+            Theoretical predictions for H0.
+
+        Returns
+        -------
+        loglike : float
+            H0 log likelihood values.
+        """
+        chi2 = ((theory - self.TRGB_H0)/self.TRGB_H0_err)**2
+        loglike = -0.5*self.log_norm_H0_TRGB  - 0.5*chi2
+        return loglike
+    
+
+    def loglike_H0_LOCAL_Type2SN(self, theory):
+        """
+        Computes the H0 likelihood for SHOES measurements.
+
+        Parameters
+        ----------
+        theory : array
+            Theoretical predictions for H0.
+
+        Returns
+        -------
+        loglike : float
+            H0 log likelihood values.
+        """
+        chi2 = ((theory - self.Type2SN_H0)/self.Type2SN_H0_err)**2
+        loglike = -0.5*self.log_norm_H0_Type2SN  - 0.5*chi2
         return loglike
     
 
@@ -1088,33 +1161,34 @@ class Sampler():
             self.init_DESI_BAO_DR2()
         if 'DES_SN_Dovekie' in self.constraints:
             self.init_SN4DES_Dovekie()
-        
-
-    def _ptform(self, u, param):
-        """
-        Transform a uniform random between 0 to 1 to match the range of a give parameters prior range.
-
-        Parameters
-        ----------
-        param : key
-            Parameter key.
-        u : float
-            Random variable.
-        """
-        return u*(self.varied_params[param]['prior'][1]-self.varied_params[param]['prior'][0])+self.varied_params[param]['prior'][0]
-
+    
 
     def ptform(self, u):
         """
-        Transform a uniform random to the prior range of sampled variables.
+        Transform a uniform random to the prior range of sampled variables, for use with dynasty.
 
         Parameters
         ----------
         u : array
             Random variables.
         """
-        param_values = np.array([self._ptform(u[i], self.varied_idx2param[i]) for i in range(0, self.Nvaried)])
+        param_values = (self.prior_max-self.prior_min)*u + self.prior_min 
         return param_values
+    
+
+    def log_prior(self, param_values):
+        """
+        Computes the log prior, for use with emcee.
+
+        Parameters
+        ----------
+        param_values : array
+            Parameter values.
+        """
+        if np.all((param_values >= self.prior_min) & (param_values <= self.prior_max)):
+            return 0.
+        else:
+            return -np.inf
     
 
     def _loglike(self, param_values):
@@ -1132,63 +1206,77 @@ class Sampler():
             Likelihood output.
         """
 
-        self.run_model(param_values)
-
-        if self.derived:
-            blob = self.get_derived(root=self.root)
-        
-        if any('DESI' in c for c in self.constraints):
-            self.prep4BAO()
-        
-        if 'DES_SN_Dovekie' in self.constraints:
-            self.prep4SN(root=self.root)
-        
-        loglike = 0.
-
-        if 'Planck' in self.constraints:
-            theory = self.theory_Planck_compressed()
-            loglike += self.loglike_Planck(theory)
-
-        if 'H0' in self.constraints:
-            theory = self.theory_H0()
-            loglike += self.loglike_H0(theory)
-        
-        if 'DESI_DR2_BAO_BGS' in self.constraints or 'DESI_DR2_BAO_FULL' in self.constraints:
-            theory = self.theory_DESI_BAO_DR2_BGS(root=self.root)
-            loglike += self.loglike_DESI_BAO_DR2_BGS(theory)
-        
-        if 'DESI_DR2_BAO_LRG1' in self.constraints or 'DESI_DR2_BAO_FULL' in self.constraints:
-            theory = self.theory_DESI_BAO_DR2_LRG1(root=self.root)
-            loglike += self.loglike_DESI_BAO_DR2_LRG1(theory)
-
-        if 'DESI_DR2_BAO_LRG2' in self.constraints or 'DESI_DR2_BAO_FULL' in self.constraints:
-            theory = self.theory_DESI_BAO_DR2_LRG2(root=self.root)
-            loglike += self.loglike_DESI_BAO_DR2_LRG2(theory)
-        
-        if 'DESI_DR2_BAO_LRG3_ELG1' in self.constraints or 'DESI_DR2_BAO_FULL' in self.constraints:
-            theory = self.theory_DESI_BAO_DR2_LRG3_ELG1(root=self.root)
-            loglike += self.loglike_DESI_BAO_DR2_LRG3_ELG1(theory)
-
-        if 'DESI_DR2_BAO_ELG2' in self.constraints or 'DESI_DR2_BAO_FULL' in self.constraints:
-            theory = self.theory_DESI_BAO_DR2_ELG2(root=self.root)
-            loglike += self.loglike_DESI_BAO_DR2_ELG2(theory)
-        
-        if 'DESI_DR2_BAO_QSO' in self.constraints or 'DESI_DR2_BAO_FULL' in self.constraints:
-            theory = self.theory_DESI_BAO_DR2_QSO(root=self.root)
-            loglike += self.loglike_DESI_BAO_DR2_QSO(theory)
-        
-        if 'DESI_DR2_BAO_LyA' in self.constraints or 'DESI_DR2_BAO_FULL' in self.constraints:
-            theory = self.theory_DESI_BAO_DR2_LyA(root=self.root)
-            loglike += self.loglike_DESI_BAO_DR2_LyA(theory)
-        
-        if 'DES_SN_Dovekie' in self.constraints:
-            theory = self.theory_SN4DES_Dovekie()
-            loglike += self.loglike_SN4DES_Dovekie(theory)
-        
-        if self.derived:
-            return loglike, blob
+        if self.sampler_method == 'emcee':
+            loglike = self.log_prior(param_values)
         else:
-            return loglike
+            loglike = 0.
+        
+        if not np.isfinite(loglike):
+            return -np.inf, np.ones(len(self.derived_keys))
+        else:
+            self.run_model(param_values)
+
+            blob = self.get_derived(root=self.root)
+            
+            if any('DESI' in c for c in self.constraints):
+                self.prep4BAO()
+            
+            if 'DES_SN_Dovekie' in self.constraints:
+                self.prep4SN(root=self.root)
+
+            if self.likelihood_switch['Planck']:
+                theory = self.theory_Planck_compressed()
+                loglike += self.loglike_Planck(theory)
+
+            if self.likelihood_switch['H0_LOCAL_ALL'] or self.likelihood_switch['H0_LOCAL_SHOES']:
+                theory = self.theory_H0()
+                loglike += self.loglike_H0_LOCAL_SHOES(theory)
+                
+            if self.likelihood_switch['H0_LOCAL_ALL'] or self.likelihood_switch['H0_LOCAL_MCP']:
+                theory = self.theory_H0()
+                loglike += self.loglike_H0_LOCAL_MCP(theory)
+
+            if self.likelihood_switch['H0_LOCAL_ALL'] or self.likelihood_switch['H0_LOCAL_TRGB']:
+                theory = self.theory_H0()
+                loglike += self.loglike_H0_LOCAL_TRGB(theory)
+
+            if self.likelihood_switch['H0_LOCAL_ALL'] or self.likelihood_switch['H0_LOCAL_Type2SN']:
+                theory = self.theory_H0()
+                loglike += self.loglike_H0_LOCAL_Type2SN(theory)
+            
+            if self.likelihood_switch['DESI_DR2_BAO_FULL'] or self.likelihood_switch['DESI_DR2_BAO_BGS']:
+                theory = self.theory_DESI_BAO_DR2_BGS(root=self.root)
+                loglike += self.loglike_DESI_BAO_DR2_BGS(theory)
+            
+            if self.likelihood_switch['DESI_DR2_BAO_FULL'] or self.likelihood_switch['DESI_DR2_BAO_LRG1']:
+                theory = self.theory_DESI_BAO_DR2_LRG1(root=self.root)
+                loglike += self.loglike_DESI_BAO_DR2_LRG1(theory)
+
+            if self.likelihood_switch['DESI_DR2_BAO_FULL'] or self.likelihood_switch['DESI_DR2_BAO_LRG2']:
+                theory = self.theory_DESI_BAO_DR2_LRG2(root=self.root)
+                loglike += self.loglike_DESI_BAO_DR2_LRG2(theory)
+
+            if self.likelihood_switch['DESI_DR2_BAO_FULL'] or self.likelihood_switch['DESI_DR2_BAO_LRG3_ELG1']:
+                theory = self.theory_DESI_BAO_DR2_LRG3_ELG1(root=self.root)
+                loglike += self.loglike_DESI_BAO_DR2_LRG3_ELG1(theory)
+
+            if self.likelihood_switch['DESI_DR2_BAO_FULL'] or self.likelihood_switch['DESI_DR2_BAO_ELG2']:
+                theory = self.theory_DESI_BAO_DR2_ELG2(root=self.root)
+                loglike += self.loglike_DESI_BAO_DR2_ELG2(theory)
+            
+            if self.likelihood_switch['DESI_DR2_BAO_FULL'] or self.likelihood_switch['DESI_DR2_BAO_QSO']:
+                theory = self.theory_DESI_BAO_DR2_QSO(root=self.root)
+                loglike += self.loglike_DESI_BAO_DR2_QSO(theory)
+            
+            if self.likelihood_switch['DESI_DR2_BAO_FULL'] or self.likelihood_switch['DESI_DR2_BAO_LyA']:
+                theory = self.theory_DESI_BAO_DR2_LyA(root=self.root)
+                loglike += self.loglike_DESI_BAO_DR2_LyA(theory)
+            
+            if self.likelihood_switch['DES_SN_Dovekie']:
+                theory = self.theory_SN4DES_Dovekie()
+                loglike += self.loglike_SN4DES_Dovekie(theory)
+            
+            return loglike, blob
     
 
     def loglike(self, param_values):
@@ -1216,8 +1304,9 @@ class Sampler():
                 blob = np.zeros(len(self.derived_keys))
                 loglike = -np.inf
         
-        if not np.isfinite(loglike):
-            loglike = -1e300  # huge negative log-likelihood
+        if self.sampler_method == 'dynasty':
+            if not np.isfinite(loglike):
+                loglike = -1e300  # huge negative log-likelihood
         
         if self.derived:
             return loglike, blob
@@ -1294,6 +1383,46 @@ class Sampler():
             self.dynasty_settings['walks'] = None
 
 
+    def set_emcee_settings(self, walkers=62, burnin=100, steps=1000):
+        """
+        Defined emcee settings.
+        
+        Parameters
+        ----------
+        nwalkers : int
+            Number of walkers in the ensemble.
+        burnin : int
+            The number of burn in steps.
+        steps: int
+            Number of steps for the walkers to move. 
+        """
+        self.emcee_settings = {
+            'walkers': walkers,
+            'burnin': burnin,
+            'steps': steps
+        }
+
+    
+    def set_pocomc_settings(self, n_effective=512, n_active=512, dynamic=True):
+        """
+        Defined emcee settings.
+        
+        Parameters
+        ----------
+        nwalkers : int
+            Number of walkers in the ensemble.
+        burnin : int
+            The number of burn in steps.
+        steps: int
+            Number of steps for the walkers to move. 
+        """
+        self.pocomc_settings = {
+            'n_effective': n_effective,
+            'n_active': n_active,
+            'dynamic': dynamic
+        }
+
+
     def run_mcmc(self, processes=1, derived=True, root=0, debug=False):
         """
         Runs the mcmc or sampling method to sample the parameter space.
@@ -1322,7 +1451,7 @@ class Sampler():
 
             if processes == 1:
                 # initialize our nested sampler
-                self.sampler = NestedSampler(
+                sampler = NestedSampler(
                     self.loglike, self.ptform, self.Nvaried,
                     nlive=self.dynasty_settings['nlive'],
                     sample=self.dynasty_settings['sample'],
@@ -1330,7 +1459,7 @@ class Sampler():
                     walks=self.dynasty_settings['walks'],
                     blob=self.derived
                 )
-                self.sampler.run_nested(dlogz=self.dynasty_settings['dlogz'])
+                sampler.run_nested(dlogz=self.dynasty_settings['dlogz'])
 
             else:
                 
@@ -1341,7 +1470,7 @@ class Sampler():
                 from dynesty.pool import Pool
             
                 with Pool(processes, self.loglike, self.ptform) as pool:
-                    self.sampler = NestedSampler(
+                    sampler = NestedSampler(
                         pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
                         nlive=self.dynasty_settings['nlive'],
                         sample=self.dynasty_settings['sample'],
@@ -1350,12 +1479,93 @@ class Sampler():
                         blob=self.derived,
                         update_interval=self.dynasty_settings['update_interval']
                     )
-                    self.sampler.run_nested(dlogz=self.dynasty_settings['dlogz'])
+                    sampler.run_nested(dlogz=self.dynasty_settings['dlogz'])
+
+            self.sampler = sampler
 
             self.samples = self.sampler.results.samples
             self.weights = self.sampler.results.importance_weights()
             if self.derived:
                 self.blob = self.sampler.results.blob
+
+        elif self.sampler_method == 'emcee':
+
+            import emcee
+
+            if processes == 1:
+
+                self.sampler = emcee.EnsembleSampler(self.emcee_settings['walkers'], self.Nvaried, self.loglike)
+
+                pos_ini = self.init_value  + 1e-4 * np.random.randn(self.emcee_settings['walkers'], self.Nvaried)
+
+                sampler.run_mcmc(pos_ini, self.emcee_settings['steps'], progress=True)
+                
+            else:
+
+                if self.settings['model'] != 'GR':
+                    if self.model._lambdified:
+                        self.model._delambdify()
+                
+                import multiprocessing
+
+                with multiprocessing.Pool(processes=processes) as pool:
+                    self.sampler = emcee.EnsembleSampler(
+                        self.emcee_settings['walkers'],
+                        self.Nvaried,
+                        self.loglike,
+                        pool=pool
+                    )
+
+                    pos_ini = self.init_value + 1e-4 * np.random.randn(self.emcee_settings['walkers'], self.Nvaried)
+
+                    sampler.run_mcmc(pos_ini, self.emcee_settings['steps'], progress=True)
+
+            self.sampler = sampler
+
+            self.samples = self.sampler.get_chain(flat=True, discard=self.emcee_settings['burnin'])
+            self.weights = np.ones(len(self.samples))
+            if self.derived:
+                self.blob = self.sampler.get_blobs(flat=True, discard=self.emcee_settings['burnin'])
+
+        elif self.sampler_method == 'pocoMC':
+            
+            from scipy.stats import uniform
+
+            import pocomc as pc
+
+            prior_list = [uniform(loc=self.prior_min[i], scale=self.prior_max[i]-self.prior_min[i]) for i in range(0, self.Nvaried)]
+
+            prior = pc.Prior(prior_list)
+
+            if processes == 1:
+
+                sampler = pc.Sampler(
+                    prior=prior,
+                    likelihood=self.loglike
+                )
+
+                sampler.run()
+
+            else:
+
+                if self.settings['model'] != 'GR':
+                    if self.model._lambdified:
+                        self.model._delambdify()
+                
+                sampler = pc.Sampler(
+                    prior=prior,
+                    likelihood=self.loglike,
+                    pool=processes
+                )
+
+                sampler.run()
+            
+            self.sampler = sampler
+
+            if self.derived:
+                self.samples, self.weights, _, _, self.blob = self.sampler.posterior(return_blobs=True)
+            else:
+                self.samples, self.weights, _, _ = self.sampler.posterior()
 
 
     def _get_param_info4chains(self):
@@ -1471,18 +1681,24 @@ class Sampler():
                 param_names += self.derived_keys
                 param_labels += self.derived_labels
 
+                for param in list(self.derived_keys):
+                    if param in ranges_dict.keys():
+                        param_ranges.append(ranges_dict[param])
+                    else:
+                        param_ranges.append(None)
+
             else:
                 data = np.load(fname + '_chains.npz')
                 blob = data['blob']
                 samples = np.column_stack([samples, blob])
                 param_names += list(data['derived_keys'])
                 param_labels += list(data['derived_labels'])
-            
-            for param in list(data['derived_keys']):
-                if param in ranges_dict.keys():
-                    param_ranges.append(ranges_dict[param])
-                else:
-                    param_ranges.append(None)
+
+                for param in list(data['derived_keys']):
+                    if param in ranges_dict.keys():
+                        param_ranges.append(ranges_dict[param])
+                    else:
+                        param_ranges.append(None)
 
         sample_dict = {}
         sample_dict['weights'] = weights
