@@ -1314,7 +1314,7 @@ class Sampler():
             return loglike, blob
         else:
             return loglike
-    
+        
 
     def time_loglike(self, size, debug=False, root=0, derived=True):
         """
@@ -1661,6 +1661,63 @@ class Sampler():
                 self.samples, self.weights, _, _ = self.sampler.posterior()
 
 
+    def get_MLE(self, root=0, debug=False, derived=False):
+        """
+        Runs iminuit to find the maximum likelihood parameter values.
+
+        Parameters
+        ----------
+        root : int, optional
+            The solution of the numerical solver to look at.
+        debug : bool, optional
+            Runs in debug mode to enable better diagnostics of errors.
+        derived : bool, optional
+            Sets whether derived data products should be included.
+
+        Returns
+        -------
+        samples_MLE : array
+            Best fit parameter values.
+        samples_MLE_errors : array
+            Best fit parameter value errors.
+        blob_MLE : array
+            Best fit parameter derived products.
+        """
+        
+        self.root = root
+        self.debug = debug
+        self.derived = False
+
+        from iminuit import Minuit
+
+        param_names = [f"p{i}" for i in range(self.Nvaried)]
+
+        def nll_wrapped(*params):
+            return -self.loglike(np.array(params))
+        
+        nll_wrapped._parameters = {
+            name: None for name in param_names
+        }
+
+        m = Minuit(nll_wrapped, *self.init_value)
+        m.errordef = 0.5
+        m.limits = list(zip(self.prior_min, self.prior_max))
+
+        m.migrad()
+        m.minos()
+
+        self.samples_MLE = np.array(m.values)
+        self.samples_MLE_errors = np.array(m.errors)
+
+        self.derived = derived
+
+        if self.derived == True:
+            _, self.blob_MLE = self.loglike(self.samples_MLE)
+            return self.samples_MLE, self.samples_MLE_errors, self.blob_MLE
+        else:
+            return self.samples_MLE, self.samples_MLE_errors
+    
+
     def _get_param_info4chains(self):
         """
         Returns parameter names, labels and ranges.
@@ -1698,6 +1755,25 @@ class Sampler():
             np.savez(
                 self.fname + '_chains.npz', 
                 samples=self.samples, weights=self.weights, 
+                param_names=param_names, param_labels=param_labels, param_ranges=param_ranges
+            )
+    
+    def save_MLE(self):
+        """
+        Save best fit values to a file.
+        """
+        param_names, param_labels, param_ranges = self._get_param_info4chains()
+        if self.derived:
+            np.savez(
+                self.fname + '_MLE.npz', 
+                samples_MLE=self.samples_MLE, samples_MLE_error=self.samples_MLE_errors,
+                param_names=param_names, param_labels=param_labels, param_ranges=param_ranges,
+                blob_MLE=self.blob_MLE, derived_keys=self.derived_keys, derived_labels=self.derived_labels
+            )
+        else:
+            np.savez(
+                self.fname + '_MLE.npz', 
+                samples_MLE=self.samples_MLE, samples_MLE_error=self.samples_MLE_errors,
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges
             )
     

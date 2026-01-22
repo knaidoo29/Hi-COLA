@@ -1821,15 +1821,15 @@ class HorndeskiModel(StandardModel):
 
                     solution = solve_ivp(
                         self._compute_primes, 
-                        [x_ini, x_final], 
-                        Y_ini, 
-                        t_eval=x_arr, 
-                        method=method, 
+                        [x_ini, x_final],
+                        Y_ini,
+                        t_eval=x_arr,
+                        method=method,
                         args=(timeout,),
                         rtol = 1e-8,
                         max_step=(x_arr[1]-x_arr[0])
                     )
-
+                    
                     mask = x_arr <= solution.t[-1]
                     y_full[:, mask] = solution.y[:, :mask.sum()]
                 
