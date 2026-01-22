@@ -1,6 +1,7 @@
 import numpy as np
 import sympy as sym
 
+from pathlib import Path
 from scipy.interpolate import interp1d
 
 from . import redshift
@@ -1349,7 +1350,7 @@ class Sampler():
         print('Time per likelihood call:', (t2-t1)/size)
 
 
-    def set_dynasty_settings(self, nlive=100, sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5):
+    def set_dynasty_settings(self, nlive=100, sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60):
         """
         Defined dynasty settings.
         
@@ -1367,11 +1368,14 @@ class Sampler():
             The update interval used for parallel processed jobs, if the code is not parallelised then this is ignored.
         dlogz : float
             The stopping criteria for nested sampling.
+        checkpoint_interval : int
+            The time in seconds between checkpoint saves.
         """
         self.dynasty_settings = {
             'nlive': nlive,
             'update_interval': update_interval,
-            'dlogz': dlogz
+            'dlogz': dlogz,
+            'checkpoint_interval': checkpoint_interval
         }
 
         self.dynasty_settings['sample'] = sample
@@ -1404,28 +1408,30 @@ class Sampler():
         }
 
     
-    def set_pocomc_settings(self, n_effective=512, n_active=512, dynamic=True):
+    def set_pocomc_settings(self, n_effective=512, n_active=512, dynamic=True, checkpoint_iter=4):
         """
         Defined emcee settings.
         
         Parameters
         ----------
-        nwalkers : int
+        nwalkers : int, optional
             Number of walkers in the ensemble.
-        burnin : int
+        burnin : int, optional
             The number of burn in steps.
-        steps: int
+        steps: int, optional
             Number of steps for the walkers to move. 
+        checkpoint_iter : int, optional
         """
         self.pocomc_settings = {
             'n_effective': n_effective,
             'n_active': n_active,
-            'dynamic': dynamic
+            'dynamic': dynamic,
+            'checkpoint_iter': checkpoint_iter
         }
 
 
     def run_mcmc(
-            self, processes=1, derived=True, checkpoint=True, resume=False,
+            self, processes=1, derived=True, checkpoint=True, whichcheckpoint=0, resume=False,
             root=0, debug=False
         ):
         """
@@ -1439,6 +1445,8 @@ class Sampler():
             Sets whether derived data products should be included.
         checkpoint : bool, optional
             Tells the code to save checkpoint outputs incase of crashes and allows resume already started evaluations.
+        whichcheckpoint : bool, optional
+            Tells the code which checkpoint output to resume from, if there are many.
         resume : bool, optional
             Resume from an already started checkpoint file.
         root : int, optional
@@ -1456,24 +1464,41 @@ class Sampler():
         if self.sampler_method == 'dynasty':
 
             from dynesty import NestedSampler
-            from pathlib import Path
 
-            # nomatch = True
-            # while nomatch:
-            #     if Path(self.fname+'.save').exists():
-
-                
-
+            if checkpoint:
+                if resume == False:
+                    if Path(self.fname + '.save').exists():
+                        fname_idx = 1
+                        while Path(self.fname + '_%i.save' % fname_idx).exists():
+                            fname_idx += 1
+                        checkpoint_fname = self.fname + '_%i.save' % fname_idx
+                    else:
+                        checkpoint_fname = self.fname + '.save'
+                else:
+                    if whichcheckpoint == 0:
+                        assert Path(self.fname + '.save').exists(), 'Checkpoint file %s.save does not exist.'
+                        checkpoint_fname = self.fname + '.save'
+                    else:
+                        fname_idx = whichcheckpoint
+                        assert Path(self.fname + '_%i.save' % fname_idx).exists(), 'Checkpoint file %s.save does not exist.'    
+                        checkpoint_fname = self.fname + '_%i.save' % fname_idx
+            else:
+                checkpoint_fname = None
+            
             if processes == 1:
-                sampler = NestedSampler(
-                    self.loglike, self.ptform, self.Nvaried,
-                    nlive=self.dynasty_settings['nlive'],
-                    sample=self.dynasty_settings['sample'],
-                    slices=self.dynasty_settings['slices'],
-                    walks=self.dynasty_settings['walks'],
-                    blob=self.derived
-                )
-                sampler.run_nested(dlogz=self.dynasty_settings['dlogz'])
+                if resume:
+                    sampler = NestedSampler.restore(checkpoint_fname)
+                    sampler.run_nested(resume=True, dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
+                else:
+                    sampler = NestedSampler(
+                        self.loglike, self.ptform, self.Nvaried,
+                        nlive=self.dynasty_settings['nlive'],
+                        sample=self.dynasty_settings['sample'],
+                        slices=self.dynasty_settings['slices'],
+                        walks=self.dynasty_settings['walks'],
+                        blob=self.derived
+                    )
+                    sampler.run_nested(dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
 
             else:
                 
@@ -1484,16 +1509,20 @@ class Sampler():
                 from dynesty.pool import Pool
             
                 with Pool(processes, self.loglike, self.ptform) as pool:
-                    sampler = NestedSampler(
-                        pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
-                        nlive=self.dynasty_settings['nlive'],
-                        sample=self.dynasty_settings['sample'],
-                        slices=self.dynasty_settings['slices'],
-                        walks=self.dynasty_settings['walks'],
-                        blob=self.derived,
-                        update_interval=self.dynasty_settings['update_interval']
-                    )
-                    sampler.run_nested(dlogz=self.dynasty_settings['dlogz'])
+                    if resume:
+                        sampler = NestedSampler.restore(checkpoint_fname)
+                        sampler.run_nested(resume=True, dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
+                    else:
+                        sampler = NestedSampler(
+                            pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
+                            nlive=self.dynasty_settings['nlive'],
+                            sample=self.dynasty_settings['sample'],
+                            slices=self.dynasty_settings['slices'],
+                            walks=self.dynasty_settings['walks'],
+                            blob=self.derived,
+                            update_interval=self.dynasty_settings['update_interval']
+                        )
+                        sampler.run_nested(dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
 
             self.sampler = sampler
 
@@ -1506,11 +1535,41 @@ class Sampler():
 
             import emcee
 
+            if checkpoint:
+                if resume == False:
+                    if Path(self.fname + '.h5').exists():
+                        fname_idx = 1
+                        while Path(self.fname + '_%i.h5' % fname_idx).exists():
+                            fname_idx += 1
+                        checkpoint_fname = self.fname + '_%i.h5' % fname_idx
+                    else:
+                        checkpoint_fname = self.fname + '.h5'
+                else:
+                    if whichcheckpoint == 0:
+                        assert Path(self.fname + '.h5').exists(), 'Checkpoint file %s.h5 does not exist.'
+                        checkpoint_fname = self.fname + '.h5'
+                    else:
+                        fname_idx = whichcheckpoint
+                        assert Path(self.fname + '_%i.h5' % fname_idx).exists(), 'Checkpoint file %s.h5 does not exist.'    
+                        checkpoint_fname = self.fname + '_%i.h5' % fname_idx
+            else:
+                checkpoint_fname = None
+
+            if checkpoint_fname is not None:
+                backend = emcee.backends.HDFBackend(checkpoint_fname)
+                if resume == False:
+                    backend.reset(self.emcee_settings['walkers'], self.Nvaried)
+            else:
+                backend = None
+
             if processes == 1:
 
-                self.sampler = emcee.EnsembleSampler(self.emcee_settings['walkers'], self.Nvaried, self.loglike)
+                sampler = emcee.EnsembleSampler(self.emcee_settings['walkers'], self.Nvaried, self.loglike, backend=backend)
 
-                pos_ini = self.init_value  + 1e-4 * np.random.randn(self.emcee_settings['walkers'], self.Nvaried)
+                if resume:
+                    pos_ini = None
+                else:
+                    pos_ini = self.init_value  + 1e-4 * np.random.randn(self.emcee_settings['walkers'], self.Nvaried)
 
                 sampler.run_mcmc(pos_ini, self.emcee_settings['steps'], progress=True)
                 
@@ -1523,14 +1582,19 @@ class Sampler():
                 import multiprocessing
 
                 with multiprocessing.Pool(processes=processes) as pool:
-                    self.sampler = emcee.EnsembleSampler(
+
+                    sampler = emcee.EnsembleSampler(
                         self.emcee_settings['walkers'],
                         self.Nvaried,
                         self.loglike,
-                        pool=pool
+                        pool=pool,
+                        backend=backend
                     )
 
-                    pos_ini = self.init_value + 1e-4 * np.random.randn(self.emcee_settings['walkers'], self.Nvaried)
+                    if resume:
+                        pos_ini = None
+                    else:
+                        pos_ini = self.init_value + 1e-4 * np.random.randn(self.emcee_settings['walkers'], self.Nvaried)
 
                     sampler.run_mcmc(pos_ini, self.emcee_settings['steps'], progress=True)
 
@@ -1551,14 +1615,27 @@ class Sampler():
 
             prior = pc.Prior(prior_list)
 
+            if resume:
+                assert Path('pocoMC_states/'+self.fname + '_%i.state' % whichcheckpoint).exists(), "File pocoMC_states/%s_%i.state does not exist." % (self.fname, whichcheckpoint)
+                checkpoint_fname = 'pocoMC_states/' + self.fname + '_%i.state' % whichcheckpoint
+            else:
+                checkpoint_fname = None
+            
+            if checkpoint:
+                save_every = self.pocomc_settings['checkpoint_iter']
+            else:
+                save_every = None
+
             if processes == 1:
 
                 sampler = pc.Sampler(
                     prior=prior,
-                    likelihood=self.loglike
+                    likelihood=self.loglike,
+                    output_dir='pocoMC_states',
+                    output_label=self.fname
                 )
 
-                sampler.run()
+                sampler.run(resume_state_path=checkpoint_fname, save_every=save_every)
 
             else:
 
@@ -1569,10 +1646,12 @@ class Sampler():
                 sampler = pc.Sampler(
                     prior=prior,
                     likelihood=self.loglike,
-                    pool=processes
+                    pool=processes,
+                    output_dir='pocoMC_states',
+                    output_label=self.fname
                 )
 
-                sampler.run()
+                sampler.run(resume_state_path=checkpoint_fname, save_every=save_every)
             
             self.sampler = sampler
 
