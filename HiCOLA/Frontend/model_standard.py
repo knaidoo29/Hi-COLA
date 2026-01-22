@@ -1075,7 +1075,7 @@ class StandardModel:
 
             if self.output['E'].ndim == 1:
                 
-                keys = ['E', 'G_G_4/G_N', 'E_prime', 'beta']
+                keys = ['E', 'G_G_4/G_N', 'E_prime', 'beta', 'Omega_c0', 'Omega_b0', 'Omega_nu_nr0']
 
                 check = True
 
@@ -1131,7 +1131,7 @@ class StandardModel:
 
                 for idx in range(0, len(self.output['Omega_c0'])):
                     
-                    keys = ['E', 'G_G_4/G_N', 'E_prime', 'beta']
+                    keys = ['E', 'G_G_4/G_N', 'E_prime', 'beta', 'Omega_c0', 'Omega_b0', 'Omega_nu_nr0']
 
                     check = True
 
@@ -1238,7 +1238,7 @@ class StandardModel:
 
             if self.output['E'].ndim == 1:
                 
-                keys = ['E', 'E_prime', 'beta', 'D1']
+                keys = ['E', 'E_prime', 'beta', 'D1', 'Omega_c0', 'Omega_b0', 'Omega_nu_nr0']
                 
                 check = True
                 for key in keys:
@@ -1291,7 +1291,7 @@ class StandardModel:
 
                 for idx in range(0, len(self.output['Omega_c0'])):
                     
-                    keys = ['E', 'E_prime', 'beta', 'D1']
+                    keys = ['E', 'E_prime', 'beta', 'D1', 'Omega_c0', 'Omega_b0', 'Omega_nu_nr0']
                     
                     check = True
                     for key in keys:

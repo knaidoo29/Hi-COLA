@@ -2,8 +2,14 @@ import numpy as np
 import sympy as sym
 from scipy.optimize import newton
 
+import signal
+
 from .model_standard import StandardModel
 from . import redshift, utils
+
+
+class TimeoutException(Exception):
+    pass
 
 
 class HorndeskiModel(StandardModel):
@@ -1183,12 +1189,7 @@ class HorndeskiModel(StandardModel):
         timeout : float, optional
             Time in seconds to force the solver to fail.
         """
-        timenow = self._check_timer()
-
-        if timenow >= timeout:
-            raise RuntimeError("Integration timeout reached")
-        else:
-            return self.lambda_funcs['fried_closure'](E, *variables)
+        return self.lambda_funcs['fried_closure'](E, *variables)
     
 
     def _lambda_fried_closure_dE(self, E, variables, timeout):
@@ -1204,12 +1205,7 @@ class HorndeskiModel(StandardModel):
         timeout : float, optional
             Time in seconds to force the solver to fail.
         """
-        timenow = self._check_timer()
-
-        if timenow >= timeout:
-            raise RuntimeError("Integration timeout reached")
-        else:
-            return self.lambda_funcs['fried_closure_dE'](E, *variables)
+        return self.lambda_funcs['fried_closure_dE'](E, *variables)
     
     
     def _lambda_fried_closure_dE2(self, E, variables, timeout):
@@ -1225,12 +1221,7 @@ class HorndeskiModel(StandardModel):
         timeout : float, optional
             Time in seconds to force the solver to fail.
         """
-        timenow = self._check_timer()
-
-        if timenow >= timeout:
-            raise RuntimeError("Integration timeout reached")
-        else:
-            return self.lambda_funcs['fried_closure_dE2'](E, *variables)
+        return self.lambda_funcs['fried_closure_dE2'](E, *variables)
     
 
     def _solve4E(self, variables, E_guess, timeout=10):
@@ -1259,13 +1250,13 @@ class HorndeskiModel(StandardModel):
         )
 
         return E
-    
+
 
     def _failure_event(self, t, y, timeout):
         """
         Failure event to gracefully exit solve_ivp when
         """
-        return 1.0 if getattr(self, "_ode_failed", False) else -1.0
+        return timeout - self._check_timer()
 
 
     def _compute_primes(self, x, Y, timeout=5):
@@ -1281,36 +1272,30 @@ class HorndeskiModel(StandardModel):
         timeout : float, optional
             Time in seconds to force the solver to fail.
         """
+        # convert x = log(a) to scale factor
+        a = np.exp(x)
+
+        # `_` used to denote current value.
+        _E, _phi, _phi_prime = Y
+    
         try:
-
-            # convert x = log(a) to scale factor
-            a = np.exp(x)
-
-            # `_` used to denote current value.
-            _E, _phi, _phi_prime = Y
             
             variables = self._get_variables(a, _E, _phi, _phi_prime, E_newton=True)
-            
             _E = self._solve4E(variables, _E, timeout=timeout)
 
             E_prime = self.lambda_funcs['E_prime'](_E, *variables)
             phi_prime = _phi_prime
             phi_primeprime = self.lambda_funcs['phi_primeprime'](_E, *variables)
-
-            timenow = self._check_timer()
-
-            if timenow >= timeout:
-                raise RuntimeError("Integration timeout reached")
             
-            if np.isfinite([E_prime, phi_prime, phi_primeprime]).all() == False:
-                self._solver_success = False
-            
-            return [E_prime, phi_prime, phi_primeprime]
-        
         except RuntimeError:
             self._ode_failed = True
-            return [0., 0., 0.]  # dummy but finite, allows the solver to gracefully exit.
+            return [0., 0., 0.] 
     
+        if not np.isfinite(E_prime) or not np.isfinite(phi_primeprime):
+            self._ode_failed = True
+            return [0., 0., 0.]
+        
+        return [E_prime, phi_prime, phi_primeprime]
 
     # Numerically computed quantities
 
@@ -1710,8 +1695,12 @@ class HorndeskiModel(StandardModel):
         self.output['w_l'] = None
     
 
+    def handler(self, signum, frame):
+        raise TimeoutException("ODE solver exceeded wall-clock timeout")
+    
+
     def _run_solver_ODE_HG(
-            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False
+            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False, skip_failure=False
         ):
         """
         Returns the Horndeski solver outputs.
@@ -1730,6 +1719,8 @@ class HorndeskiModel(StandardModel):
             only work if the reason for the failure is due to the equations becoming stiff.
         store_hat : bool, optional
             If true will store raw ODE outputs before normalisation corrections for E renormalisation via f_H.
+        skip_failure : bool, optional
+            Tells the code to ignore failure event finding, for graceful exits.
         """
         if self.output['success'] == False:
 
@@ -1820,22 +1811,44 @@ class HorndeskiModel(StandardModel):
 
                 self._initiate_solver_status()
                 self._start_timer()
+
+                y_full = np.full((len(Y_ini), len(x_arr)), np.nan)
+
+                signal.signal(signal.SIGALRM, self.handler)
+                signal.alarm(int(timeout))
+
+                try:
+
+                    solution = solve_ivp(
+                        self._compute_primes, 
+                        [x_ini, x_final], 
+                        Y_ini, 
+                        t_eval=x_arr, 
+                        method=method, 
+                        args=(timeout,),
+                        rtol = 1e-8,
+                        max_step=(x_arr[1]-x_arr[0])
+                    )
+
+                    mask = x_arr <= solution.t[-1]
+                    y_full[:, mask] = solution.y[:, :mask.sum()]
                 
-                solution = solve_ivp(
-                    self._compute_primes, 
-                    [x_ini, x_final], 
-                    Y_ini, 
-                    t_eval=x_arr, 
-                    method=method, 
-                    args=(timeout,),
-                    rtol = 1e-8,
-                    max_step=(x_arr[1]-x_arr[0]),
-                    events=self._failure_event,
-                )
+                except TimeoutException:
+                    print(" -- Solver timed out for root %i! Filling uncomputed points with NaNs." % idx)
+                    self._solver_success = False
+
+                    # We can still access y values from previously computed steps:
+                    if hasattr(self, "_last_computed_solution"):
+                        t_done, y_done = self._last_computed_solution
+                        mask = x_arr <= t_done[-1]
+                        y_full[:, mask] = y_done[:, :mask.sum()]
+
+                finally:
+                    signal.alarm(0)  # cancel the alarm
                 
                 solver_success[idx] = self._solver_success
                 
-                solution = solution["y"].T
+                solution = y_full.T
                 _E_arr = solution[:,0]
                 _phi_arr = solution[:,1]
                 _phi_prime_arr = solution[:,2]
@@ -1958,10 +1971,7 @@ class HorndeskiModel(StandardModel):
                 if z_start == 0.:
                     self.params['H0'] = self.params['H0_ref']*Ehat_arr[idx][0]
                 else:
-                    if self._solver_success == True:
-                        self.params['H0'] = self.params['H0_ref']*Ehat_arr[idx][-1]
-                    else:
-                        self.params['H0'] = np.nan
+                    self.params['H0'] = self.params['H0_ref']*Ehat_arr[idx][-1]
                 
                 if np.isfinite(self.params['H0']) and self.params['H0'] != self.params['H0_ref'] and self._solver_success:
                     self.params['f_H_value'] = self.params['H0']/self.params['H0_ref']
@@ -2081,7 +2091,7 @@ class HorndeskiModel(StandardModel):
             self.output['w_nu_nr'] = w_nu_nr_arr
             self.output['w_l'] = w_l_arr
     
-
+    
     def _run_solver_derived_NONE(self):
         """
         Returns None for derived outputs.
@@ -2288,9 +2298,9 @@ class HorndeskiModel(StandardModel):
 
 
     def run_solver(
-            self, z_max=1200., Npoints=1000, forwards=True, GR=False, variable1=1, variable2=None, 
-            phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=1, newton_tol=1e-5,
-            derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True
+            self, z_max=1200., Npoints=200, forwards=True, GR=False, variable1=1, variable2=None, 
+            phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=5, newton_tol=1e-5,
+            derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True, skip_failure=False
         ):
         """
         Runs the numerical solver for a user defined Horndeski model.
@@ -2331,6 +2341,8 @@ class HorndeskiModel(StandardModel):
         HS_correction : bool, optional
             Applies a bias correction to the Hu & Sugiyama prediction for z_star which is only valid
             for models close to Planck LCDM values during the early universe.
+        skip_failure : bool, optional
+            Tells the code to ignore failure event finding, for graceful exits.
         
         Returns
         -------
@@ -2397,13 +2409,13 @@ class HorndeskiModel(StandardModel):
                 self._run_solver_ODE_HG(
                     E_ini, phi_ini, phi_prime_ini,
                     method=method, timeout=timeout, 
-                    store_hat=store_hat
+                    store_hat=store_hat, skip_failure=skip_failure
                 )
 
                 if derived:
                     if self.verbose:
                         print(' - Computing main derived quantities.')
-
+                    
                     self._run_solver_derived_HG()
 
             else:
@@ -2428,7 +2440,7 @@ class HorndeskiModel(StandardModel):
 
             if self.verbose:
                 print(' - Computing additional derived quantities numerically.')
-        
+
             # compute the effective equation of state
             self.comp_w_eff()
 

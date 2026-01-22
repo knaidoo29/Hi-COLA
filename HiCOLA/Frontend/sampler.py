@@ -449,7 +449,8 @@ class Sampler():
         else:
             self.model.run_solver(
                 z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value,
-                variable1=self.solver['variable1'], phi_ini=phi_ini_value, variable2=self.solver['variable2'], phi_prime_ini=phi_prime_ini_value
+                variable1=self.solver['variable1'], phi_ini=phi_ini_value, variable2=self.solver['variable2'], phi_prime_ini=phi_prime_ini_value,
+                skip_failure=True
             )
     
     
@@ -1423,7 +1424,10 @@ class Sampler():
         }
 
 
-    def run_mcmc(self, processes=1, derived=True, root=0, debug=False):
+    def run_mcmc(
+            self, processes=1, derived=True, checkpoint=True, resume=False,
+            root=0, debug=False
+        ):
         """
         Runs the mcmc or sampling method to sample the parameter space.
         
@@ -1433,6 +1437,10 @@ class Sampler():
             The number of processes to use for the 
         derived : bool, optional
             Sets whether derived data products should be included.
+        checkpoint : bool, optional
+            Tells the code to save checkpoint outputs incase of crashes and allows resume already started evaluations.
+        resume : bool, optional
+            Resume from an already started checkpoint file.
         root : int, optional
             The solution of the numerical solver to look at.
         debug : bool, optional
@@ -1448,9 +1456,15 @@ class Sampler():
         if self.sampler_method == 'dynasty':
 
             from dynesty import NestedSampler
+            from pathlib import Path
+
+            # nomatch = True
+            # while nomatch:
+            #     if Path(self.fname+'.save').exists():
+
+                
 
             if processes == 1:
-                # initialize our nested sampler
                 sampler = NestedSampler(
                     self.loglike, self.ptform, self.Nvaried,
                     nlive=self.dynasty_settings['nlive'],
