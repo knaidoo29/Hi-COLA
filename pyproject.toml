@@ -25,6 +25,7 @@ dependencies = [
     "numpy",
     "scipy",
     "sympy",
+    "importlib-resources>=5.0; python_version<'3.9'"
 ]
 dynamic = ["version"]
 
