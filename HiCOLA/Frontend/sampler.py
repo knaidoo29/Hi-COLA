@@ -1077,7 +1077,11 @@ class Sampler():
         """
 
         import csv
-        from importlib.resources import files
+
+        try:
+            from importlib.resources import files  # Python ≥ 3.9
+        except ImportError:
+            from importlib_resources import files  # Python 3.8
         
         csv_path = files("HiCOLA.Frontend.obs.DES_Dovekie") / "DES-Dovekie_HD.csv"
         
