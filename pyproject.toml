@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "HiCOLA"
 description = "Hi-COLA simulates cosmological large-scale structure for a wide class of Horndeski theories. Built using a COLA solver forked from FML by HAWinther. "
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [{name="Hi-COLA team", email="team.hicola@gmail.com"}]
 maintainers = [{name = "Hi-COLA team", email="team.hicola@gmail.com"}]
@@ -15,6 +15,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Natural Language :: English",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -37,11 +38,7 @@ Changelog = "https://github.com/Hi-COLACode/Hi-COLA/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 dev = ["black", "flake8", "ipython", "jupyter", "mypy"]
 docs = ["numpydoc", "sphinx", "sphinx-rtd-theme"]
-test = [
-    "nose",
-    "pytest>=6.0",
-    "pytest-cov"
-]
+test = ["nose", "pytest>=6.0", "pytest-cov"]
 
 [tool.setuptools.dynamic]
 version = {file = ["VERSION"]}
@@ -54,4 +51,11 @@ exclude = ["build", "docs", "tests", "tutorials"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-HiCOLA = ["*.json", "*.md", "*.txt", '*.csv', '*.npz']
+HiCOLA = [
+    "*.json", 
+    "*.md", 
+    "*.txt", 
+    "*.csv", 
+    "*.npz", 
+    "Frontend/obs/DES_Dovekie/**/*",
+    "Frontend/obs/DESY5/**/*"]
