@@ -11,5 +11,8 @@ from .model_horndeski import HorndeskiModel
 # Cubic Galileon model
 from .model_cubic_galileon import CubicGalileon
 
+# Cubic Galileon Extensions model
+from .model_cubic_galileon_extensions import CubicGalileonExtensions
+
 # MCMC sampler
 from .sampler import Sampler

@@ -2,6 +2,8 @@ import numpy as np
 import sympy as sym
 
 from pathlib import Path
+import warnings
+
 from scipy.interpolate import interp1d
 
 from . import redshift
@@ -9,6 +11,7 @@ from . import redshift
 from .model_standard import StandardModel
 from .model_horndeski import HorndeskiModel
 from .model_cubic_galileon import CubicGalileon
+from .model_cubic_galileon_extensions import CubicGalileonExtensions
 from .model_ess import ESS
 
 
@@ -108,7 +111,7 @@ class Sampler():
 
         self.settings = settings
 
-        if self.settings['sampler'] in ['dynasty', 'emcee', 'pocoMC']:
+        if self.settings['sampler'] in ['dynesty', 'emcee', 'pocoMC']:
             self.sampler_method = self.settings['sampler']
         else:
             assert False, "Unknown sampler %s." % self.settings['sampler']
@@ -124,6 +127,8 @@ class Sampler():
             self.model = HorndeskiModel()
         elif self.settings['model'] == 'CubicGalileon':
             self.model = CubicGalileon()
+        elif self.settings['model'] == 'CubicGalileonExtensions':
+            self.model = CubicGalileonExtensions()
         elif self.settings['model'] == 'ESS':
             self.model = ESS()
         else:
@@ -193,6 +198,18 @@ class Sampler():
                 else:
                     assert False, "You cannot define both phi_ini and phi_prime_ini since once or both must be defined via the closure equation."
 
+            # check solver method
+            if 'method' in self.settings['solver']:
+                self.solver['method'] = self.settings['solver']['method']
+            else:
+                self.solver['method'] = 'Radau'
+            
+            # check which_root
+            if 'which_root' in self.settings['solver']:
+                self.solver['which_root'] = self.settings['solver']['which_root']
+            else:
+                self.solver['which_root'] = 0
+
         if self.settings['model'] != 'GR':
             
             if self.settings['model'] == 'Horndeski':
@@ -204,6 +221,10 @@ class Sampler():
                 self.model.define_K(self.settings['K']['func'], self.settings['K']['params'])
                 self.model.define_G3(self.settings['G3']['func'], self.settings['G3']['params'])
                 self.model.define_G4(self.settings['G4']['func'], self.settings['G4']['params'])
+
+            elif self.settings['model'] == 'CubicGalileonExtensions':
+
+                self.model.define_extension(self.settings['extension'])
 
             self.model.construct_model(lambdify=False)
 
@@ -220,6 +241,15 @@ class Sampler():
                 self._check_param_settings(str(param))
         
         ### Add conditions for parameters from other models...
+
+        if self.settings['model'] == 'CubicGalileonExtensions':
+
+            if self.settings['extension'] == 1 or self.settings['extension'] == 2:
+
+                # check phi_0
+                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+                self._check_param_settings('phi_0')
+
 
         if self.settings['model'] == 'ESS':
 
@@ -357,6 +387,15 @@ class Sampler():
 
             if self.settings['model'] == 'Horndeski':
                 
+                K_G3_G4_value = []
+                for param in self.model.sym['K_G3_G4_syms']:
+                    if self.params_info[str(param)] == 'fixed':
+                        K_G3_G4_value.append(self.fixed_params[str(param)])
+                    else:
+                        K_G3_G4_value.append(params[self.varied_param2idx[str(param)]])
+            
+            if self.settings['model'] != 'GR':
+
                 if (self.solver['variable1'] == 0 and self.solver['variable2'] == 1) or (self.solver['variable1'] == 1 and self.solver['variable2'] == 0):
                     phi_ini_value = 1e-9
                     phi_prime_ini_value = 1e-9
@@ -377,19 +416,14 @@ class Sampler():
                     else:
                         phi_ini_value = 1e-9
                 
-                K_G3_G4_value = []
-                for param in self.model.sym['K_G3_G4_syms']:
-                    if self.params_info[str(param)] == 'fixed':
-                        K_G3_G4_value.append(self.fixed_params[str(param)])
-                    else:
-                        K_G3_G4_value.append(params[self.varied_param2idx[str(param)]])
-            
+            # Reset some of these parameters i
+
             if self.settings['model'] == 'CubicGalileon':
                 
                 self.solver['variable1'] = 1
                 self.solver['variable2'] = None
                 phi_ini_value = 1e-9
-                phi_prime_ini_value = 1e-9
+                phi_prime_ini_value = 1e-9            
             
             elif self.settings['model'] == 'ESS':
                 
@@ -398,6 +432,16 @@ class Sampler():
                 phi_ini_value = 1e-9
                 phi_prime_ini_value = 1e-9
 
+            if self.settings['model'] == 'CubicGalileonExtensions':
+                
+                if self.settings['extension'] == 1 or self.settings['extension'] == 2:
+                    if self.params_info['phi_0'] == 'fixed':
+                        f_g2_value = self.fixed_params['phi_0']
+                    else:
+                        f_g2_value = params[self.varied_param2idx['phi_0']]
+
+            elif self.settings['model'] == 'ESS':
+                   
                 if self.params_info['f_k2'] == 'fixed':
                     f_k2_value = self.fixed_params['f_k2']
                     f_g2_value = self.fixed_params['f_g2']
@@ -417,6 +461,11 @@ class Sampler():
         elif self.settings['model'] == 'CubicGalileon':
             self.model.set_cosmo_params(
                 H0_value, Omega_c_value, Omega_b_value, fphi_value,
+                w0=w0_value, wa=wa_value, mnu=Mnu_value
+            )
+        elif self.settings['model'] == 'CubicGalileonExtensions':
+            self.model.set_cosmo_params(
+                H0_value, Omega_c_value, Omega_b_value, fphi_value, [f_g2_value],
                 w0=w0_value, wa=wa_value, mnu=Mnu_value
             )
         elif self.settings['model'] == 'ESS':
@@ -446,14 +495,16 @@ class Sampler():
             HS_correction_value = True
 
         if self.settings['model'] == 'GR':
-            self.model.run_solver(z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value)
+            self.model.run_solver(
+                z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value, method=self.solver['method'], 
+                which_root=self.solver['which_root']
+            )
         else:
             self.model.run_solver(
                 z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value,
-                variable1=self.solver['variable1'], phi_ini=phi_ini_value, variable2=self.solver['variable2'], phi_prime_ini=phi_prime_ini_value,
-                skip_failure=True
+                variable1=self.solver['variable1'], phi_ini=phi_ini_value, variable2=self.solver['variable2'], 
+                phi_prime_ini=phi_prime_ini_value, method=self.solver['method'], which_root=self.solver['which_root']
             )
-    
     
     # Get derived products
 
@@ -1167,7 +1218,7 @@ class Sampler():
 
     def ptform(self, u):
         """
-        Transform a uniform random to the prior range of sampled variables, for use with dynasty.
+        Transform a uniform random to the prior range of sampled variables, for use with dynesty.
 
         Parameters
         ----------
@@ -1216,7 +1267,15 @@ class Sampler():
         if not np.isfinite(loglike):
             return -np.inf, np.ones(len(self.derived_keys))
         else:
-            self.run_model(param_values)
+            
+            if self.debug:
+                self.run_model(param_values)
+            else:
+                # suppresses divide by zero errors sometimes seen in some of the lambdified functions.
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        self.run_model(param_values)
 
             blob = self.get_derived(root=self.root)
             
@@ -1306,7 +1365,7 @@ class Sampler():
                 blob = np.zeros(len(self.derived_keys))
                 loglike = -np.inf
         
-        if self.sampler_method == 'dynasty':
+        if self.sampler_method == 'dynesty':
             if not np.isfinite(loglike):
                 loglike = -1e300  # huge negative log-likelihood
         
@@ -1350,9 +1409,9 @@ class Sampler():
         print('Time per likelihood call:', (t2-t1)/size)
 
 
-    def set_dynasty_settings(self, nlive=100, sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60):
+    def set_dynesty_settings(self, nlive=100, sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60):
         """
-        Defined dynasty settings.
+        Defined dynesty settings.
         
         Parameters
         ----------
@@ -1371,21 +1430,21 @@ class Sampler():
         checkpoint_interval : int
             The time in seconds between checkpoint saves.
         """
-        self.dynasty_settings = {
+        self.dynesty_settings = {
             'nlive': nlive,
             'update_interval': update_interval,
             'dlogz': dlogz,
             'checkpoint_interval': checkpoint_interval
         }
 
-        self.dynasty_settings['sample'] = sample
+        self.dynesty_settings['sample'] = sample
 
         if sample == 'rwalks':
-            self.dynasty_settings['walks'] = walks
-            self.dynasty_settings['slices'] = None
+            self.dynesty_settings['walks'] = walks
+            self.dynesty_settings['slices'] = None
         else:
-            self.dynasty_settings['slices'] = slices
-            self.dynasty_settings['walks'] = None
+            self.dynesty_settings['slices'] = slices
+            self.dynesty_settings['walks'] = None
 
 
     def set_emcee_settings(self, walkers=62, burnin=100, steps=1000):
@@ -1431,8 +1490,7 @@ class Sampler():
 
 
     def run_mcmc(
-            self, processes=1, derived=True, checkpoint=True, whichcheckpoint=0, resume=False,
-            root=0, debug=False
+            self, processes=1, derived=True, checkpoint=True, whichcheckpoint=0, resume=False, root=0, debug=False
         ):
         """
         Runs the mcmc or sampling method to sample the parameter space.
@@ -1461,7 +1519,7 @@ class Sampler():
 
         self.initialise()
         
-        if self.sampler_method == 'dynasty':
+        if self.sampler_method == 'dynesty':
 
             from dynesty import NestedSampler
 
@@ -1476,11 +1534,11 @@ class Sampler():
                         checkpoint_fname = self.fname + '.save'
                 else:
                     if whichcheckpoint == 0:
-                        assert Path(self.fname + '.save').exists(), 'Checkpoint file %s.save does not exist.'
+                        assert Path(self.fname + '.save').exists(), 'Checkpoint file %s.save does not exist.' % self.fname
                         checkpoint_fname = self.fname + '.save'
                     else:
                         fname_idx = whichcheckpoint
-                        assert Path(self.fname + '_%i.save' % fname_idx).exists(), 'Checkpoint file %s.save does not exist.'    
+                        assert Path(self.fname + '_%i.save' % fname_idx).exists(), 'Checkpoint file %s.save does not exist.' % self.fname
                         checkpoint_fname = self.fname + '_%i.save' % fname_idx
             else:
                 checkpoint_fname = None
@@ -1488,17 +1546,17 @@ class Sampler():
             if processes == 1:
                 if resume:
                     sampler = NestedSampler.restore(checkpoint_fname)
-                    sampler.run_nested(resume=True, dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
+                    sampler.run_nested(resume=True, dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
                 else:
                     sampler = NestedSampler(
                         self.loglike, self.ptform, self.Nvaried,
-                        nlive=self.dynasty_settings['nlive'],
-                        sample=self.dynasty_settings['sample'],
-                        slices=self.dynasty_settings['slices'],
-                        walks=self.dynasty_settings['walks'],
+                        nlive=self.dynesty_settings['nlive'],
+                        sample=self.dynesty_settings['sample'],
+                        slices=self.dynesty_settings['slices'],
+                        walks=self.dynesty_settings['walks'],
                         blob=self.derived
                     )
-                    sampler.run_nested(dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
+                    sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
 
             else:
                 
@@ -1511,18 +1569,18 @@ class Sampler():
                 with Pool(processes, self.loglike, self.ptform) as pool:
                     if resume:
                         sampler = NestedSampler.restore(checkpoint_fname)
-                        sampler.run_nested(resume=True, dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
+                        sampler.run_nested(resume=True, dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
                     else:
                         sampler = NestedSampler(
                             pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
-                            nlive=self.dynasty_settings['nlive'],
-                            sample=self.dynasty_settings['sample'],
-                            slices=self.dynasty_settings['slices'],
-                            walks=self.dynasty_settings['walks'],
+                            nlive=self.dynesty_settings['nlive'],
+                            sample=self.dynesty_settings['sample'],
+                            slices=self.dynesty_settings['slices'],
+                            walks=self.dynesty_settings['walks'],
                             blob=self.derived,
-                            update_interval=self.dynasty_settings['update_interval']
+                            update_interval=self.dynesty_settings['update_interval']
                         )
-                        sampler.run_nested(dlogz=self.dynasty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynasty_settings['checkpoint_interval'])
+                        sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
 
             self.sampler = sampler
 
@@ -1659,7 +1717,7 @@ class Sampler():
                 self.samples, self.weights, _, _, self.blob = self.sampler.posterior(return_blobs=True)
             else:
                 self.samples, self.weights, _, _ = self.sampler.posterior()
-
+    
 
     def get_MLE(self, root=0, debug=False, derived=False):
         """
@@ -1716,6 +1774,57 @@ class Sampler():
             return self.samples_MLE, self.samples_MLE_errors, self.blob_MLE
         else:
             return self.samples_MLE, self.samples_MLE_errors
+        
+    
+    def get_proflike(self, param, size=10, bounds=None, root=0, debug=False, derived=False):
+        """
+        Returns the profile likelihood for a given parameter.
+
+        Parameters
+        ----------
+        root : int, optional
+            The solution of the numerical solver to look at.
+        debug : bool, optional
+            Runs in debug mode to enable better diagnostics of errors.
+        derived : bool, optional
+            Sets whether derived data products should be included.
+        """
+
+        self.root = root
+        self.debug = debug
+        self.derived = False
+
+        from iminuit import Minuit
+
+        param_names = [f"p{i}" for i in range(self.Nvaried)]
+
+        def nll_wrapped(*params):
+            return -self.loglike(np.array(params))
+        
+        nll_wrapped._parameters = {
+            name: None for name in param_names
+        }
+
+        m = Minuit(nll_wrapped, *self.init_value)
+        m.errordef = 0.5
+        m.limits = list(zip(self.prior_min, self.prior_max))
+
+        m.migrad()
+
+        profile_index = self.varied_param2idx[param]
+
+        if bounds is None:
+            param_grid = np.linspace(self.prior_min[profile_index], self.prior_max[profile_index], size)
+        else:
+            param_grid = np.linspace(bounds[0], bounds[1], size)
+
+        profile = m.mnprofile(profile_index, grid=param_grid)
+        
+        self.proflike_param = param
+        self.proflike_x = profile[0]
+        self.proflike_NLL = profile[1]
+
+        return self.proflike_x, self.proflike_NLL
     
 
     def _get_param_info4chains(self):
@@ -1766,18 +1875,30 @@ class Sampler():
         if self.derived:
             np.savez(
                 self.fname + '_MLE.npz', 
-                samples_MLE=self.samples_MLE, samples_MLE_error=self.samples_MLE_errors,
+                samples_MLE=self.samples_MLE, samples_MLE_errors=self.samples_MLE_errors,
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges,
                 blob_MLE=self.blob_MLE, derived_keys=self.derived_keys, derived_labels=self.derived_labels
             )
         else:
             np.savez(
                 self.fname + '_MLE.npz', 
-                samples_MLE=self.samples_MLE, samples_MLE_error=self.samples_MLE_errors,
+                samples_MLE=self.samples_MLE, samples_MLE_errors=self.samples_MLE_errors,
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges
             )
     
 
+    def save_NLL(self):
+        """
+        Save best fit values to a file.
+        """
+        param_names, param_labels, param_ranges = self._get_param_info4chains()
+        np.savez(
+            self.fname + '_%s_NLL.npz' % self.proflike_param, 
+            proflike_x=self.proflike_x, proflike_NLL=self.proflike_NLL,
+            param_names=param_names, param_labels=param_labels, param_ranges=param_ranges
+        )
+
+    
     def add2dict(self, sample_dict, param, chain, label, ranges=None):
         """
         Add parameter chains to the dictionary.
@@ -1803,7 +1924,7 @@ class Sampler():
         _dict['prior'] = ranges
         sample_dict[param] = _dict
         return sample_dict
-    
+
 
     def sample2dict(self, fname=None, derived=True, derived_limits=[['fphi0', [0., 1.]]]):
         """
@@ -1877,6 +1998,57 @@ class Sampler():
         return sample_dict
     
 
+    def MLE2dict(self, fname=None, derived=True):
+        """
+        Construct dictionary for samples.
+
+        Parameters
+        ----------
+        fname : str
+            To load samples from a file.
+        derived : bool
+            Whether to include derived data products.
+        
+        Returns
+        -------
+        MLE_dict : dict
+            MLE dictionary containing MLE best fit values and errors.
+        """
+
+        if fname is None:
+            samples_MLE = self.samples_MLE
+            samples_MLE_errors = self.samples_MLE_errors
+            param_names, param_labels, param_ranges = self._get_param_info4chains()
+        else:
+            data = np.load(fname + '_MLE.npz')
+            samples_MLE = data['samples_MLE']
+            samples_MLE_errors = data['samples_MLE_errors']
+            param_names = list(data['param_names'])
+            param_labels = list(data['param_labels'])
+
+        if derived:
+            
+            if fname is None:
+                blob_MLE = self.blob_MLE
+                samples_MLE = np.concatenate([samples_MLE, blob_MLE])
+                samples_MLE_errors = np.concatenate([samples_MLE_errors, -np.ones_like(blob_MLE)])
+                param_names += self.derived_keys
+                param_labels += self.derived_labels
+            else:
+                data = np.load(fname + '_MLE.npz')
+                blob_MLE = data['blob_MLE']
+                samples_MLE = np.concatenate([samples_MLE, blob_MLE])
+                samples_MLE_errors = np.concatenate([samples_MLE_errors, -np.ones_like(blob_MLE)])
+                param_names += list(data['derived_keys'])
+                param_labels += list(data['derived_labels'])
+
+        MLE_dict = {}
+        for (i, param) in enumerate(param_names):
+            MLE_dict[param] = {'MLE': samples_MLE[i], 'MLE_err': samples_MLE_errors[i]}
+        
+        return MLE_dict
+    
+
     def sample2MCSamples(self, sample_dict=None, fname=None, derived=False, derived_limits=[['fphi0', [0., 1.]]]):
         """
         Converts sample chains into the getdist MCSamples object.
@@ -1918,7 +2090,7 @@ class Sampler():
         return MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict)
     
     
-    def quickplot(self, sample_dict=None, fname=None, derived=False, params=None):
+    def quickplot(self, sample_dict=None, fname=None, derived=False, params=None, MLE_dict=None):
         """
         Quickly plots parameter constraints using getdist.
 
@@ -1932,6 +2104,8 @@ class Sampler():
             Whether to include derived data products.
         params : list, optional
             List of parameters to plot.
+        MLE_dict : dict, optional
+            MLE dictionary.
         """
 
         import matplotlib.pylab as plt
@@ -1939,11 +2113,18 @@ class Sampler():
 
         chains = self.sample2MCSamples(sample_dict=sample_dict, fname=fname, derived=derived)
 
-        g = plots.get_subplot_plotter()
         if params is None:
-            g.triangle_plot([chains], filled=True, title_limit=1)
-        else:
-            g.triangle_plot([chains], params, filled=True, title_limit=1)
+            params = self.varied_params
+        
+        markers_dict = {}
+
+        if MLE_dict is not None:
+            for param in params:
+                if param in MLE_dict:
+                    markers_dict[param] = MLE_dict[param]['MLE']
+        
+        g = plots.get_subplot_plotter()
+        g.triangle_plot([chains], params, filled=True, title_limit=1, markers=markers_dict, marker_args={"lw": 1, 'color':'k', 'ls':'--'})
 
 
     def clean(self):

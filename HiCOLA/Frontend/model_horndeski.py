@@ -300,7 +300,7 @@ class HorndeskiModel(StandardModel):
             self.sym['K_G3_G4_syms'].append(G3_sym)
         for G4_sym in self.sym['G4_syms']:
             self.sym['K_G3_G4_syms'].append(G4_sym)
-
+    
 
     def get_K_derivatives(self):
         """
@@ -312,7 +312,7 @@ class HorndeskiModel(StandardModel):
         self.symfunc['Kphi'] = sym.diff(self.symfunc['K'],self.sym['phi'])
         self.symfunc['Kphiphi'] = sym.diff(self.symfunc['Kphi'],self.sym['phi'])
         self.symfunc['Kphix'] = sym.diff(self.symfunc['Kphi'],self.sym['X'])
-            
+
 
     def get_G3_derivatives(self):
         """
@@ -546,7 +546,7 @@ class HorndeskiModel(StandardModel):
         self.get_alpha2()
         self.symfunc['calC'] = (self.symfunc['alpha1'] + self.symfunc['alpha2'])/(self.symfunc['alpha0'] + 2.*self.symfunc['alpha1']*self.symfunc['alpha2'] + self.symfunc['alpha2']*self.symfunc['alpha2'])
 
-
+    
     def get_beta(self):
         """
         The coupling in equation 3.13 in https://arxiv.org/abs/2209.01666, i.e. the deviation from 1.
@@ -1469,7 +1469,7 @@ class HorndeskiModel(StandardModel):
             E_ini, E_prime_ini, phi_ini, phi_prime_ini, 
             rho_g_ini, rho_b_ini, rho_c_ini, rho_l_ini, w_l_ini,
             rho_nu_ur_ini, rho_nu_nr_ini, w_nu_nr_ini,
-            variable2=None
+            variable2=None, which_root=None
         ):
         """
         Finds the real roots for initialising the solver for 1 variable, using only the closure, 
@@ -1506,6 +1506,8 @@ class HorndeskiModel(StandardModel):
             Initial equation of state for massive neutrinos.
         variable2 : int
             Second variable jointly solved via the closure and E_prime equation to set up the initial conditions.
+        which_root : int, optional
+            Can specify which root to consider and thus which roots to ignore.
         """
 
         # Basic checks
@@ -1572,6 +1574,9 @@ class HorndeskiModel(StandardModel):
                 if root.is_real:
                     roots1.append(root)
             
+            if which_root is not None:
+                roots1 = [roots1[which_root]]
+
             variable2_str = None
             roots2_raw = None
             roots2 = None
@@ -1700,7 +1705,7 @@ class HorndeskiModel(StandardModel):
     
 
     def _run_solver_ODE_HG(
-            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False, skip_failure=False
+            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False
         ):
         """
         Returns the Horndeski solver outputs.
@@ -1719,8 +1724,6 @@ class HorndeskiModel(StandardModel):
             only work if the reason for the failure is due to the equations becoming stiff.
         store_hat : bool, optional
             If true will store raw ODE outputs before normalisation corrections for E renormalisation via f_H.
-        skip_failure : bool, optional
-            Tells the code to ignore failure event finding, for graceful exits.
         """
         if self.output['success'] == False:
 
@@ -2300,7 +2303,8 @@ class HorndeskiModel(StandardModel):
     def run_solver(
             self, z_max=1200., Npoints=200, forwards=True, GR=False, variable1=1, variable2=None, 
             phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=5, newton_tol=1e-5,
-            derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True, skip_failure=False
+            derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True,
+            which_root=None
         ):
         """
         Runs the numerical solver for a user defined Horndeski model.
@@ -2341,8 +2345,6 @@ class HorndeskiModel(StandardModel):
         HS_correction : bool, optional
             Applies a bias correction to the Hu & Sugiyama prediction for z_star which is only valid
             for models close to Planck LCDM values during the early universe.
-        skip_failure : bool, optional
-            Tells the code to ignore failure event finding, for graceful exits.
         
         Returns
         -------
@@ -2395,7 +2397,7 @@ class HorndeskiModel(StandardModel):
                 E_ini, E_prime_ini, phi_ini, phi_prime_ini, 
                 Omega_g_ini, Omega_b_ini, Omega_c_ini, Omega_l_ini, w_l_ini,
                 Omega_nu_ur_ini, Omega_nu_nr_ini, w_nu_nr_ini,
-                variable2,
+                variable2, which_root=which_root
             )
 
             if self.output['success']:
@@ -2409,7 +2411,7 @@ class HorndeskiModel(StandardModel):
                 self._run_solver_ODE_HG(
                     E_ini, phi_ini, phi_prime_ini,
                     method=method, timeout=timeout, 
-                    store_hat=store_hat, skip_failure=skip_failure
+                    store_hat=store_hat
                 )
 
                 if derived:
