@@ -93,6 +93,8 @@ class CubicGalileonExtensions(HorndeskiModel):
 
         if self.ext == 1:
             K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0]]
+        if self.ext == 2:
+            K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0]]
 
         assert len(K_G3_G4_values) == len(self.sym['K_G3_G4_syms']), "Length of Horndeski K_G3_G4_values must match number of defined K, G3, G4 variables."
         self.params['K_G3_G4_values'] = K_G3_G4_values

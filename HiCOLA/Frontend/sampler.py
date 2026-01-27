@@ -1867,6 +1867,7 @@ class Sampler():
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges
             )
     
+
     def save_MLE(self):
         """
         Save best fit values to a file.
@@ -2107,11 +2108,11 @@ class Sampler():
         MLE_dict : dict, optional
             MLE dictionary.
         """
-
+        
         import matplotlib.pylab as plt
         from getdist import plots
 
-        chains = self.sample2MCSamples(sample_dict=sample_dict, fname=fname, derived=derived)
+        chains = self.sample2MCSamples(fname=fname, sample_dict=sample_dict, derived=derived)
 
         if params is None:
             params = self.varied_params
