@@ -1118,7 +1118,14 @@ class StandardModel:
 
                     _f1 = _D1prime/_D1
 
-                    D1, f1 = _D1, _f1
+                    D1, f1 = np.zeros(len(self.output['x'])), np.zeros(len(self.output['x']))
+
+                    if len(_D1) == len(D1):
+                        D1, f1 = _D1, _f1
+                    else:
+                        D1[:len(_D1)], f1[:len(_D1)] = _D1, _f1
+                        D1[len(_D1):], f1[len(_D1):] = np.nan, np.nan
+
                 
                 else:
 
@@ -1174,7 +1181,11 @@ class StandardModel:
 
                         _f1 = _D1prime/_D1
 
-                        D1[idx], f1[idx] = _D1, _f1
+                        if len(_D1) == len(D1[idx]):
+                            D1[idx], f1[idx] = _D1, _f1
+                        else:
+                            D1[idx][:len(_D1)], f1[idx][:len(_D1)] = _D1, _f1
+                            D1[idx][len(_D1):], f1[idx][len(_D1):] = np.nan, np.nan
 
                     else:
                         D1[idx] = np.nan * np.ones(len(self.output['x']))
@@ -1279,6 +1290,14 @@ class StandardModel:
                     _f2 = _dD2/_D2
 
                     D2, f2 = _D2, _f2
+
+                    D2, f2 = np.zeros(len(self.output['x'])), np.zeros(len(self.output['x']))
+
+                    if len(_D2) == len(D2):
+                        D2, f2 = _D2, _f2
+                    else:
+                        D2[:len(_D2)], f2[:len(_D2)] = _D2, _f2
+                        D2[len(_D2):], f2[len(_D2):] = np.nan, np.nan
             
                 else:
 
@@ -1331,8 +1350,12 @@ class StandardModel:
 
                         _f2 = _dD2/_D2
 
-                        D2[idx], f2[idx] = _D2, _f2
-                
+                        if len(_D2) == len(D2[idx]):
+                            D2[idx], f2[idx] = _D2, _f2
+                        else:
+                            D2[idx][:len(_D2)], f2[idx][:len(_D2)] = _D2, _f2
+                            D2[idx][len(_D2):], f2[idx][len(_D2):] = np.nan, np.nan
+                        
                     else:
                         
                         D2[idx] = np.nan * np.ones(len(self.output['x']))

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "HiCOLA"
 description = "Hi-COLA simulates cosmological large-scale structure for a wide class of Horndeski theories. Built using a COLA solver forked from FML by HAWinther. "
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [{name="Hi-COLA team", email="team.hicola@gmail.com"}]
 maintainers = [{name = "Hi-COLA team", email="team.hicola@gmail.com"}]
@@ -15,7 +15,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Natural Language :: English",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -24,8 +23,7 @@ classifiers = [
 dependencies = [
     "numpy",
     "scipy",
-    "sympy",
-    "importlib-resources>=5.0; python_version<'3.9'"
+    "sympy"
 ]
 dynamic = ["version"]
 

@@ -184,20 +184,24 @@ class Sampler():
             else:
                 self.solver['variable1'] = 0
             
-             # check phi_ini
+            # check phi_prime_ini
             if 'phi_prime_ini' in self.settings:
                 self._check_param_settings('phi_prime_ini')
                 self.solver['variable2'] = None
             else:
                 self.solver['variable2'] = 1
             
+            if self.settings['model'] == 'CubicGalileon':
+                self.solver['variable1'] = 1
+                self.solver['variable2'] = None
+
             if self.solver['variable1'] is None:
                 if self.solver['variable2'] is not None:
                     self.solver['variable1'] = self.solver['variable2']
                     self.solver['variable2'] = None
                 else:
-                    assert False, "You cannot define both phi_ini and phi_prime_ini since once or both must be defined via the closure equation."
-
+                    assert False, "You cannot define both phi_ini and phi_prime_ini since one or both must be defined via the closure equation."
+            
             # check solver method
             if 'method' in self.settings['solver']:
                 self.solver['method'] = self.settings['solver']['method']
@@ -1077,12 +1081,8 @@ class Sampler():
         """
 
         import csv
-
-        try:
-            from importlib.resources import files  # Python ≥ 3.9
-        except ImportError:
-            from importlib_resources import files  # Python 3.8
-        
+        from importlib.resources import files  # Python ≥ 3.9
+                
         csv_path = files("HiCOLA.Frontend.obs.DES_Dovekie") / "DES-Dovekie_HD.csv"
         
         with open(csv_path, newline='', encoding='utf-8') as f:
