@@ -16,3 +16,6 @@ from .model_cubic_galileon_extensions import CubicGalileonExtensions
 
 # MCMC sampler
 from .sampler import Sampler
+
+# Scripts
+from .run_sampler import main

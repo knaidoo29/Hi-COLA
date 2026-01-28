@@ -2353,7 +2353,7 @@ class HorndeskiModel(StandardModel):
         """
 
         if self.verbose:
-            print('Hi-COLA: Running numerical ODE solver')
+            print(' Hi-COLA: Running numerical ODE solver')
             print(' - Initialising solver...')
 
         self.output = {}

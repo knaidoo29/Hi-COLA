@@ -91,8 +91,7 @@ class Sampler():
         else:
             self.varied_params[param] = {
                 'init': self.settings[param]['init'],
-                'type': self.settings[param]['prior'][0],
-                'prior': [self.settings[param]['prior'][1],self.settings[param]['prior'][2]],
+                'prior': [self.settings[param]['prior'][0],self.settings[param]['prior'][1]],
             }
             self.params_info[param] = 'varied'
             self.varied_param2idx[param] = self.Nvaried
@@ -213,7 +212,8 @@ class Sampler():
                 self.solver['which_root'] = self.settings['solver']['which_root']
             else:
                 self.solver['which_root'] = 0
-
+        
+        
         if self.settings['model'] != 'GR':
             
             if self.settings['model'] == 'Horndeski':
@@ -280,7 +280,7 @@ class Sampler():
         allowed_constraints = [
             'Planck', 'H0_LOCAL_ALL', 'H0_LOCAL_SHOES', 'H0_LOCAL_MCP', 'H0_LOCAL_TRGB', 'H0_LOCAL_Type2SN',
             'DESI_DR2_BAO_FULL', 'DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2',
-            'DESI_DR2_BAO_LRG_ELG', 'DESI_DR2_BAO_ELG', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA',
+            'DESI_DR2_BAO_LRG3_ELG1', 'DESI_DR2_BAO_ELG2', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA',
             'DES_SN_Dovekie'
         ]
         self.constraint2idx = {}
@@ -298,7 +298,7 @@ class Sampler():
                         assert False, "If H0_LOCAL_ALL specified do not include %s" % H0_LOCAL
                 
             if constraint == 'DESI_DR2_BAO_FULL':
-                for BAO in ['DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2','DESI_DR2_BAO_LRG_ELG', 'DESI_DR2_BAO_ELG', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA']:
+                for BAO in ['DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2','DESI_DR2_BAO_LRG3_ELG1', 'DESI_DR2_BAO_ELG', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA']:
                     if BAO in self.settings['constraints']:
                         assert False, "If DESI_DR2_BAO_FULL specified do not include %s" % BAO
             self.likelihood_switch[constraint] = True
@@ -307,8 +307,13 @@ class Sampler():
         for (i, constraint) in enumerate(self.settings['constraints']):
             self.constraint2idx[constraint] = i
 
+        if 'path' not in self.settings:
+            self.path = ''
+        else:
+            self.path = self.settings['path']
+
         assert 'fname' in self.settings, "Must define fname for outputs."
-        self.fname = self.settings['fname']
+        self.fname = self.path + self.settings['fname']
 
         if self.verbose:
 
@@ -322,16 +327,16 @@ class Sampler():
             for key in self.varied_params.keys():
                 print(' -- %s' % key)
                 print(' --- init = %0.6f' % (self.varied_params[key]['init']))
-                print(' --- prior_type = %s' % (self.varied_params[key]['type']))
                 print(' --- prior_bounds = %s' % (self.varied_params[key]['prior']))
             
             print(' - Constraints:')
             for constraint in self.constraints:
                 print(' -- %s' % constraint)
-
-            self.fname = self.settings['fname']
+            
             for constraint in self.constraints:
                 self.fname += '_%s' % constraint
+            
+            print(' - Filename Prefix: %s' % self.fname)
 
         
     # run a model with a set of parameters
@@ -500,8 +505,7 @@ class Sampler():
 
         if self.settings['model'] == 'GR':
             self.model.run_solver(
-                z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value, method=self.solver['method'], 
-                which_root=self.solver['which_root']
+                z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value
             )
         else:
             self.model.run_solver(
@@ -743,7 +747,7 @@ class Sampler():
         self.DESI_type_BGS = 'DV_over_rs'
         self.DESI_type_LRG1 = np.array(['DM_over_rs', 'DH_over_rs'])
         self.DESI_type_LRG2 = np.array(['DM_over_rs', 'DH_over_rs'])
-        self.DESI_type_LRG2_ELG1 = np.array(['DM_over_rs', 'DH_over_rs'])
+        self.DESI_type_LRG3_ELG1 = np.array(['DM_over_rs', 'DH_over_rs'])
         self.DESI_type_ELG2 = np.array(['DM_over_rs', 'DH_over_rs'])
         self.DESI_type_QSO = np.array(['DM_over_rs', 'DH_over_rs'])
         self.DESI_type_LyA = np.array(['DH_over_rs', 'DM_over_rs'])
@@ -1209,8 +1213,8 @@ class Sampler():
             'DESI_DR2_BAO_BGS',
             'DESI_DR2_BAO_LRG1',
             'DESI_DR2_BAO_LRG2',
-            'DESI_DR2_BAO_LRG_ELG', 
-            'DESI_DR2_BAO_ELG', 
+            'DESI_DR2_BAO_LRG3_ELG1', 
+            'DESI_DR2_BAO_ELG2', 
             'DESI_DR2_BAO_QSO', 
             'DESI_DR2_BAO_LyA', 
         ]
@@ -1413,7 +1417,7 @@ class Sampler():
         print('Time per likelihood call:', (t2-t1)/size)
 
 
-    def set_dynesty_settings(self, nlive=100, sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60):
+    def set_dynesty_settings(self, nlive=100, bound='multi', sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60):
         """
         Defined dynesty settings.
         
@@ -1421,6 +1425,8 @@ class Sampler():
         ----------
         nlive : int
             Live points in the sampler.
+        bound : str
+            Dynesty bound type.
         sample : str
             Sampling type.
         slices : int
@@ -1436,6 +1442,7 @@ class Sampler():
         """
         self.dynesty_settings = {
             'nlive': nlive,
+            'bound': bound,
             'update_interval': update_interval,
             'dlogz': dlogz,
             'checkpoint_interval': checkpoint_interval
@@ -1555,6 +1562,7 @@ class Sampler():
                     sampler = NestedSampler(
                         self.loglike, self.ptform, self.Nvaried,
                         nlive=self.dynesty_settings['nlive'],
+                        bound=self.dynesty_settings['bound'],
                         sample=self.dynesty_settings['sample'],
                         slices=self.dynesty_settings['slices'],
                         walks=self.dynesty_settings['walks'],
@@ -1578,6 +1586,7 @@ class Sampler():
                         sampler = NestedSampler(
                             pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
                             nlive=self.dynesty_settings['nlive'],
+                            bound=self.dynesty_settings['bound'],
                             sample=self.dynesty_settings['sample'],
                             slices=self.dynesty_settings['slices'],
                             walks=self.dynesty_settings['walks'],
@@ -1592,6 +1601,10 @@ class Sampler():
             self.weights = self.sampler.results.importance_weights()
             if self.derived:
                 self.blob = self.sampler.results.blob
+            
+            # compute bayesian evidence
+            self.logZ = self.sampler.results.logz[-1]
+            self.logZerr = self.sampler.results.logzerr[-1]
 
         elif self.sampler_method == 'emcee':
 
@@ -1667,6 +1680,10 @@ class Sampler():
             if self.derived:
                 self.blob = self.sampler.get_blobs(flat=True, discard=self.emcee_settings['burnin'])
 
+            # compute bayesian evidence
+            self.logZ = None
+            self.logZerr = None
+
         elif self.sampler_method == 'pocoMC':
             
             from scipy.stats import uniform
@@ -1721,6 +1738,9 @@ class Sampler():
                 self.samples, self.weights, _, _, self.blob = self.sampler.posterior(return_blobs=True)
             else:
                 self.samples, self.weights, _, _ = self.sampler.posterior()
+
+            # compute bayesian evidence
+            self.logZ, self.logZerr = self.sampler.evidence()
     
 
     def get_MLE(self, root=0, debug=False, derived=False):
@@ -1862,13 +1882,15 @@ class Sampler():
                 self.fname + '_chains.npz', 
                 samples=self.samples, weights=self.weights, 
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges,
-                blob=self.blob, derived_keys=self.derived_keys, derived_labels=self.derived_labels
+                blob=self.blob, derived_keys=self.derived_keys, derived_labels=self.derived_labels,
+                logZ=self.logZ, logZerr=self.logZerr
             )
         else:
             np.savez(
                 self.fname + '_chains.npz', 
                 samples=self.samples, weights=self.weights, 
-                param_names=param_names, param_labels=param_labels, param_ranges=param_ranges
+                param_names=param_names, param_labels=param_labels, param_ranges=param_ranges,
+                logZ=self.logZ, logZerr=self.logZerr
             )
     
 
@@ -2120,6 +2142,8 @@ class Sampler():
 
         if params is None:
             params = self.varied_params
+            if derived:
+                params = None
         
         markers_dict = {}
 
