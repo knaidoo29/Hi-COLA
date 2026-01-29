@@ -12,7 +12,6 @@ environ['NUMEXPR_NUM_THREADS'] = N_THREADS
 import HiCOLA
 import yaml
 
-
 def main():
 
     print(' Hi-COLA: Running Sampler')
@@ -64,7 +63,7 @@ def main():
         
         print()
         print(' - Running MLE...')
-
+        
         samp.get_MLE(root=0, debug=debug, derived=True)
         
         print()
