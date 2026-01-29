@@ -2022,7 +2022,7 @@ class Sampler():
         for (i, param) in enumerate(param_names):
             sample_dict = self.add2dict(sample_dict, param, samples[:,i], param_labels[i], param_ranges[i])
         
-        return sample_dict
+        return param_names, sample_dict
     
 
     def MLE2dict(self, fname=None, derived=True):
@@ -2098,7 +2098,7 @@ class Sampler():
         from getdist import MCSamples
 
         if sample_dict is None:
-            sample_dict = self.sample2dict(fname=fname, derived=derived, derived_limits=derived_limits)
+            param_names, sample_dict = self.sample2dict(fname=fname, derived=derived, derived_limits=derived_limits)
         
         weights = sample_dict['weights']
         param_names = []
@@ -2114,7 +2114,7 @@ class Sampler():
                 if sample_dict[param]['prior'] is not None:
                     ranges_dict[param] = sample_dict[param]['prior']
 
-        return MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict)
+        return param_names, MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict)
     
     
     def quickplot(self, sample_dict=None, fname=None, derived=False, params=None, MLE_dict=None):
@@ -2138,12 +2138,18 @@ class Sampler():
         import matplotlib.pylab as plt
         from getdist import plots
 
-        chains = self.sample2MCSamples(fname=fname, sample_dict=sample_dict, derived=derived)
+        param_names, chains = self.sample2MCSamples(fname=fname, sample_dict=sample_dict, derived=derived)
 
         if params is None:
-            params = self.varied_params
             if derived:
-                params = None
+                params = param_names
+            else:
+                params = param_names[:len(self.varied_params)]
+        
+        if self.settings['model'] == 'GR':
+            params = [p for p in param_names if p not in {'fphi0', 'c_s_sq_gt_0', 'Q_s_gt_0'}]
+        else:
+            params = [p for p in param_names if p not in {'c_s_sq_gt_0', 'Q_s_gt_0'}]
         
         markers_dict = {}
 
