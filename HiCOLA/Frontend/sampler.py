@@ -1206,8 +1206,17 @@ class Sampler():
         """
         if 'Planck' in self.constraints:
             self.init_Planck()
-        if 'H0' in self.constraints:
+        
+        H0_constraints = [
+            'H0_LOCAL_ALL', 
+            'H0_LOCAL_SHOES', 
+            'H0_LOCAL_MCP', 
+            'H0_LOCAL_TRGB', 
+            'H0_LOCAL_Type2SN'
+        ]
+        if any(item in self.constraints for item in H0_constraints):
             self.init_H0()
+        
         DESI_constraints = [
             'DESI_DR2_BAO_FULL', 
             'DESI_DR2_BAO_BGS',
@@ -1220,6 +1229,7 @@ class Sampler():
         ]
         if any(item in self.constraints for item in DESI_constraints):
             self.init_DESI_BAO_DR2()
+        
         if 'DES_SN_Dovekie' in self.constraints:
             self.init_SN4DES_Dovekie()
     
