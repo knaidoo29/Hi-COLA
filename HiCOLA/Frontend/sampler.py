@@ -5,6 +5,7 @@ from pathlib import Path
 import warnings
 
 from scipy.interpolate import interp1d
+from scipy.integrate import cumulative_trapezoid
 
 from . import redshift
 
@@ -281,7 +282,7 @@ class Sampler():
             'Planck', 'H0_LOCAL_ALL', 'H0_LOCAL_SHOES', 'H0_LOCAL_MCP', 'H0_LOCAL_TRGB', 'H0_LOCAL_Type2SN',
             'DESI_DR2_BAO_FULL', 'DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2',
             'DESI_DR2_BAO_LRG3_ELG1', 'DESI_DR2_BAO_ELG2', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA',
-            'DES_SN_Dovekie', 'stability'
+            'DES_SN_Dovekie', 'ISW_SIGN', 'stability'
         ]
         self.constraint2idx = {}
 
@@ -1200,6 +1201,40 @@ class Sampler():
         return loglike
     
 
+    def loglike_ISW_SIGN(self, root=0):
+        """
+        Implement an ISW sign likelihood which test whether the integral:
+        f_ISW = int D1**2 * Sigma * E * (1 - f - zeta)/chi^2  dchi.
+        is positive.
+
+        Parameters
+        ----------
+        root : int, optional
+            The solution of the numerical solver to look at.
+
+        Returns
+        -------
+        f_ISW : float
+            A constant proportional to the amplitude of the ISW signal.
+        """
+        if self.settings['model'] == 'GR':
+            chi = self.model.output['Dc']
+            intf = np.zeros(len(chi))
+            intf[:-1] = (self.model.output['D1'][:-1]**2)*self.model.output['Sigma'][:-1]*self.model.output['E'][:-1]*(1-self.model.output['f1'][:-1]-self.model.output['zeta'][:-1])/(chi[:-1]**2)
+        else:
+            chi = self.model.output['Dc'][root]
+            intf = np.zeros(len(chi))
+            intf[:-1] = (self.model.output['D1'][root][:-1]**2)*self.model.output['Sigma'][root][:-1]*self.model.output['E'][root][:-1]*(1-self.model.output['f1'][root][:-1]-self.model.output['zeta'][root][:-1])/(chi[:-1]**2)
+        nz_WISE = 61.3 - 9.96/(0.142+self.model.output['z']) - 85.*self.model.output['z']
+        nz_WISE[np.where(nz_WISE < 0.)[0]] = 0.
+        intf *= nz_WISE
+        f_ISW = cumulative_trapezoid(intf[::-1], x=chi[::-1], initial=0.)[-1]
+        if f_ISW < 0:
+            return -np.inf
+        else:
+            return 0.
+
+
     def initialise(self):
         """
         Initialise observations and likelihood quantities.
@@ -1354,6 +1389,9 @@ class Sampler():
             if self.likelihood_switch['DES_SN_Dovekie']:
                 theory = self.theory_SN4DES_Dovekie()
                 loglike += self.loglike_SN4DES_Dovekie(theory)
+
+            if self.likelihood_switch['ISW_SIGN']:
+                loglike += self.loglike_ISW_SIGN(root=self.root)
 
             if self.likelihood_switch['stability']:
                 if self.settings['model'] != 'GR':

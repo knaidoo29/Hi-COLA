@@ -41,18 +41,19 @@ def main():
     debug = settings['run'].get('debug', True)
     resume = settings['run'].get('resume', False)
     whichcheckpoint = settings['run'].get('whichcheckpoint', 0)
-
+    
     print()
     print(' - Running MCMC...')
     print()
 
-    samp.run_mcmc(
-        processes=NPROCESSES,
-        derived=True,
-        debug=debug,
-        resume=resume,
-        whichcheckpoint=whichcheckpoint,
-    )
+    if settings['run'].get('MCMC', True):
+        samp.run_mcmc(
+            processes=NPROCESSES,
+            derived=True,
+            debug=debug,
+            resume=resume,
+            whichcheckpoint=whichcheckpoint,
+        )
 
     print()
     print(' - Saving chains to %s_chains.npz' % samp.fname)
