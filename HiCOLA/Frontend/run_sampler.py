@@ -47,6 +47,7 @@ def main():
     print()
 
     if settings['run'].get('MCMC', True):
+
         samp.run_mcmc(
             processes=NPROCESSES,
             derived=True,
@@ -55,10 +56,10 @@ def main():
             whichcheckpoint=whichcheckpoint,
         )
 
-    print()
-    print(' - Saving chains to %s_chains.npz' % samp.fname)
+        print()
+        print(' - Saving chains to %s_chains.npz' % samp.fname)
 
-    samp.save_chains()
+        samp.save_chains()
 
     if settings['run'].get('MLE', False):
         
