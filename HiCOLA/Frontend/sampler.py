@@ -2194,15 +2194,16 @@ class Sampler():
         param_names, chains = self.sample2MCSamples(fname=fname, sample_dict=sample_dict, derived=derived)
 
         if params is None:
+            
             if derived:
                 params = param_names
             else:
                 params = param_names[:len(self.varied_params)]
-        
-        if self.settings['model'] == 'GR':
-            params = [p for p in param_names if p not in {'fphi0', 'c_s_sq_gt_0', 'Q_s_gt_0'}]
-        else:
-            params = [p for p in param_names if p not in {'c_s_sq_gt_0', 'Q_s_gt_0'}]
+            
+            if self.settings['model'] == 'GR':
+                params = [p for p in param_names if p not in {'fphi0', 'c_s_sq_gt_0', 'Q_s_gt_0'}]
+            else:
+                params = [p for p in param_names if p not in {'c_s_sq_gt_0', 'Q_s_gt_0'}]
         
         markers_dict = {}
 
