@@ -1399,7 +1399,7 @@ class Sampler():
             return loglike, blob
     
 
-    def loglike(self, param_values, iminuitmode=False):
+    def loglike(self, param_values):
         """
         Log-likelihood function for various parameters.
 
@@ -1424,7 +1424,7 @@ class Sampler():
                 blob = np.zeros(len(self.derived_keys))
                 loglike = -np.inf
         
-        if self.sampler_method == 'dynesty' or iminuitmode:
+        if self.sampler_method == 'dynesty':
             if not np.isfinite(loglike):
                 loglike = -1e300  # huge negative log-likelihood
         
@@ -1826,8 +1826,16 @@ class Sampler():
         param_names = [f"p{i}" for i in range(self.Nvaried)]
 
         def nll_wrapped(*params):
-            return -self.loglike(np.array(params), iminuitmode=True)
-        
+            try:
+                loglike, _ = self._loglike(np.array(params))
+            except Exception:
+                return 1e30
+
+            if not np.isfinite(loglike):
+                return 1e30
+
+            return -loglike
+
         nll_wrapped._parameters = {
             name: None for name in param_names
         }
@@ -1874,7 +1882,16 @@ class Sampler():
         param_names = [f"p{i}" for i in range(self.Nvaried)]
 
         def nll_wrapped(*params):
-            return -self.loglike(np.array(params), iminuitmode=True)
+            try:
+                loglike, _ = self._loglike(np.array(params))
+            except Exception:
+                return 1e30
+
+            if not np.isfinite(loglike):
+                return 1e30
+
+            return -loglike
+
         
         nll_wrapped._parameters = {
             name: None for name in param_names
