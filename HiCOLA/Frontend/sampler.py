@@ -5,7 +5,7 @@ from pathlib import Path
 import warnings
 
 from scipy.interpolate import interp1d
-from scipy.integrate import cumulative_trapezoid
+from scipy.integrate import simpson
 
 from . import redshift
 
@@ -1219,16 +1219,14 @@ class Sampler():
         """
         if self.settings['model'] == 'GR':
             chi = self.model.output['Dc']
-            intf = np.zeros(len(chi))
-            intf[:-1] = (self.model.output['D1'][:-1]**2)*self.model.output['Sigma'][:-1]*self.model.output['E'][:-1]*(1-self.model.output['f1'][:-1]-self.model.output['zeta'][:-1])/(chi[:-1]**2)
+            intf = (self.model.output['D1']**2)*self.model.output['Sigma']*self.model.output['E']*(1-self.model.output['f1']-self.model.output['zeta'])
         else:
             chi = self.model.output['Dc'][root]
-            intf = np.zeros(len(chi))
-            intf[:-1] = (self.model.output['D1'][root][:-1]**2)*self.model.output['Sigma'][root][:-1]*self.model.output['E'][root][:-1]*(1-self.model.output['f1'][root][:-1]-self.model.output['zeta'][root][:-1])/(chi[:-1]**2)
+            intf = (self.model.output['D1'][root]**2)*self.model.output['Sigma'][root]*self.model.output['E'][root]*(1-self.model.output['f1'][root]-self.model.output['zeta'][root])
         nz_WISE = 61.3 - 9.96/(0.142+self.model.output['z']) - 85.*self.model.output['z']
         nz_WISE[np.where(nz_WISE < 0.)[0]] = 0.
         intf *= nz_WISE
-        f_ISW = cumulative_trapezoid(intf[::-1], x=chi[::-1], initial=0.)[-1]
+        f_ISW = simpson(intf[::-1], x=chi[::-1])
         if f_ISW < 0:
             return -np.inf
         else:
