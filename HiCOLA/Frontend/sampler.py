@@ -1845,7 +1845,12 @@ class Sampler():
         m.limits = list(zip(self.prior_min, self.prior_max))
 
         m.migrad()
-        m.minos()
+        
+        if m.valid and np.isfinite(m.edm):
+            m.minos()
+        else:
+            print(" -- MINOS skipped, using HESSE instead")
+            m.hesse()
 
         self.samples_MLE = np.array(m.values)
         self.samples_MLE_errors = np.array(m.errors)
