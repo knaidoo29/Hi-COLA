@@ -1827,7 +1827,7 @@ class Sampler():
 
         def nll_wrapped(*params):
             try:
-                loglike = self._loglike(np.array(params))
+                loglike = self.loglike(np.array(params))
             except Exception:
                 return 1e30
 
