@@ -1401,7 +1401,7 @@ class Sampler():
             return loglike, blob
     
 
-    def loglike(self, param_values):
+    def loglike(self, param_values, iminuitmode=False):
         """
         Log-likelihood function for various parameters.
 
@@ -1426,7 +1426,7 @@ class Sampler():
                 blob = np.zeros(len(self.derived_keys))
                 loglike = -np.inf
         
-        if self.sampler_method == 'dynesty':
+        if self.sampler_method == 'dynesty' or iminuitmode:
             if not np.isfinite(loglike):
                 loglike = -1e300  # huge negative log-likelihood
         
