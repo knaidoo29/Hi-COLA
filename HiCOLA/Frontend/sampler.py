@@ -1828,7 +1828,7 @@ class Sampler():
         param_names = [f"p{i}" for i in range(self.Nvaried)]
 
         def nll_wrapped(*params):
-            return -self.loglike(np.array(params))
+            return -self.loglike(np.array(params), iminuitmode=True)
         
         nll_wrapped._parameters = {
             name: None for name in param_names
@@ -1876,7 +1876,7 @@ class Sampler():
         param_names = [f"p{i}" for i in range(self.Nvaried)]
 
         def nll_wrapped(*params):
-            return -self.loglike(np.array(params))
+            return -self.loglike(np.array(params), iminuitmode=True)
         
         nll_wrapped._parameters = {
             name: None for name in param_names
@@ -2194,7 +2194,7 @@ class Sampler():
         param_names, chains = self.sample2MCSamples(fname=fname, sample_dict=sample_dict, derived=derived)
 
         if params is None:
-            
+
             if derived:
                 params = param_names
             else:

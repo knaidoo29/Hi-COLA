@@ -42,12 +42,12 @@ def main():
     resume = settings['run'].get('resume', False)
     whichcheckpoint = settings['run'].get('whichcheckpoint', 0)
     
-    print()
-    print(' - Running MCMC...')
-    print()
-
     if settings['run'].get('MCMC', True):
 
+        print()
+        print(' - Running MCMC...')
+        print()
+        
         samp.run_mcmc(
             processes=NPROCESSES,
             derived=True,
