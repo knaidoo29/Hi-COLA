@@ -1847,11 +1847,13 @@ class Sampler():
 
         m.migrad()
         
-        if m.valid and np.isfinite(m.edm):
-            m.minos()
-        else:
-            print(" -- MINOS skipped, using HESSE instead")
-            m.hesse()
+        # TODO: decide whether to remove minos entirely
+        # if m.valid and np.isfinite(m.edm):
+        #     m.minos()
+        # else:
+        #     print(" -- MINOS skipped, using HESSE instead")
+        
+        m.hesse()
 
         self.samples_MLE = np.array(m.values)
         self.samples_MLE_errors = np.array(m.errors)
