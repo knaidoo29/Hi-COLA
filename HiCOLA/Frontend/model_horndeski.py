@@ -2160,7 +2160,7 @@ class HorndeskiModel(StandardModel):
             Omega_nu_nr_arr = self.output['Omega_nu_nr']
             w_nu_nr_arr = self.output['w_nu_nr']
             w_l_arr = self.output['w_l']
-
+            
             roots1 = self.output['initialiser']['roots1']
             
             G_G_4_G_N = np.zeros((len(roots1), len(x_arr)))

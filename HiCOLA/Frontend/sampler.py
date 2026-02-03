@@ -1204,7 +1204,7 @@ class Sampler():
     def loglike_ISW_SIGN(self, root=0):
         """
         Implement an ISW sign likelihood which test whether the integral:
-        f_ISW = int D1**2 * Sigma * E * (1 - f - zeta)/chi^2  dchi.
+        f_ISW = int D1**2 * Sigma * E * (1 - f - zeta)  dchi.
         is positive.
 
         Parameters
@@ -1223,9 +1223,10 @@ class Sampler():
         else:
             chi = self.model.output['Dc'][root]
             intf = (self.model.output['D1'][root]**2)*self.model.output['Sigma'][root]*self.model.output['E'][root]*(1-self.model.output['f1'][root]-self.model.output['zeta'][root])
-        nz_WISE = 61.3 - 9.96/(0.142+self.model.output['z']) - 85.*self.model.output['z']
-        nz_WISE[np.where(nz_WISE < 0.)[0]] = 0.
-        intf *= nz_WISE
+        # Note: removed WISE nz integral to make this a purely ISW sign function
+        # nz_WISE = 61.3 - 9.96/(0.142+self.model.output['z']) - 85.*self.model.output['z']
+        # nz_WISE[np.where(nz_WISE < 0.)[0]] = 0.
+        # intf *= nz_WISE
         f_ISW = simpson(intf[::-1], x=chi[::-1])
         if f_ISW < 0:
             return -np.inf
