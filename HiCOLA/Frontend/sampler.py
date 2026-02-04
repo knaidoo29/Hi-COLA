@@ -1861,7 +1861,7 @@ class Sampler():
         m.migrad()
         
         #TODO: decide whether to remove minos entirely
-        if m.valid and np.isfinite(m.edm):
+        if m.valid and np.isfinite(m.fmin.edm):
             m.minos()
         else:
             print(" -- MINOS skipped, using HESSE instead")
