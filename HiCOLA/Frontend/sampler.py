@@ -249,11 +249,16 @@ class Sampler():
 
         if self.settings['model'] == 'CubicGalileonExtensions':
 
-            if self.settings['extension'] == 1 or self.settings['extension'] == 2:
+            if self.settings['extension'] >= 1 and self.settings['extension'] <= 3:
 
                 # check phi_0
                 assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
                 self._check_param_settings('phi_0')
+                
+                if self.settings['extension'] == 3:
+                    # check n
+                    assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
+                    self._check_param_settings('n')
 
 
         if self.settings['model'] == 'ESS':
@@ -444,12 +449,20 @@ class Sampler():
 
             if self.settings['model'] == 'CubicGalileonExtensions':
                 
-                if self.settings['extension'] == 1 or self.settings['extension'] == 2:
+                if self.settings['extension'] >= 1 or self.settings['extension'] <= 3:
                     if self.params_info['phi_0'] == 'fixed':
-                        f_g2_value = self.fixed_params['phi_0']
+                        phi0_value = self.fixed_params['phi_0']
                     else:
-                        f_g2_value = params[self.varied_param2idx['phi_0']]
+                        phi0_value = params[self.varied_param2idx['phi_0']]
+                    ext_K_G3_G4 = [phi0_value]
 
+                if self.settings['extension'] == 3:
+                    if self.params_info['phi_0'] == 'fixed':
+                        n_value = self.fixed_params['n']
+                    else:
+                        n_value = params[self.varied_param2idx['n']]
+                    ext_K_G3_G4.append(n_value)
+                    
             elif self.settings['model'] == 'ESS':
                    
                 if self.params_info['f_k2'] == 'fixed':
@@ -475,7 +488,7 @@ class Sampler():
             )
         elif self.settings['model'] == 'CubicGalileonExtensions':
             self.model.set_cosmo_params(
-                H0_value, Omega_c_value, Omega_b_value, fphi_value, [f_g2_value],
+                H0_value, Omega_c_value, Omega_b_value, fphi_value, ext_K_G3_G4,
                 w0=w0_value, wa=wa_value, mnu=Mnu_value
             )
         elif self.settings['model'] == 'ESS':
@@ -1847,13 +1860,12 @@ class Sampler():
 
         m.migrad()
         
-        # TODO: decide whether to remove minos entirely
-        # if m.valid and np.isfinite(m.edm):
-        #     m.minos()
-        # else:
-        #     print(" -- MINOS skipped, using HESSE instead")
-        
-        m.hesse()
+        #TODO: decide whether to remove minos entirely
+        if m.valid and np.isfinite(m.edm):
+            m.minos()
+        else:
+            print(" -- MINOS skipped, using HESSE instead")
+            m.hesse()
 
         self.samples_MLE = np.array(m.values)
         self.samples_MLE_errors = np.array(m.errors)

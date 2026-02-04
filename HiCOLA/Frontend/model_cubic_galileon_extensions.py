@@ -25,6 +25,10 @@ class CubicGalileonExtensions(HorndeskiModel):
             self.define_K('k_1*X', 'k_1')
             self.define_G3('g_31*X*exp(phi/phi_0)', 'g_31, phi_0')
             self.define_G4('0.5', None)
+        if self.ext == 3:
+            self.define_K('k_1*X', 'k_1')
+            self.define_G3('g_31*X*(1+(phi/phi_0)**n)', 'g_31, phi_0, n')
+            self.define_G4('0.5', None)
     
 
     def set_cosmo_params(
@@ -95,6 +99,8 @@ class CubicGalileonExtensions(HorndeskiModel):
             K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0]]
         if self.ext == 2:
             K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0]]
+        if self.ext == 3:
+            K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0], ext_K_G3_G4[1]]
 
         assert len(K_G3_G4_values) == len(self.sym['K_G3_G4_syms']), "Length of Horndeski K_G3_G4_values must match number of defined K, G3, G4 variables."
         self.params['K_G3_G4_values'] = K_G3_G4_values
