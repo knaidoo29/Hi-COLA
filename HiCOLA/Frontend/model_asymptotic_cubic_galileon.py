@@ -1,11 +1,11 @@
 from .model_horndeski import HorndeskiModel
 
 
-class CubicGalileonExtensions(HorndeskiModel):
+class AsymCubicGalileon(HorndeskiModel):
 
     """
     A class for constructing background expansion and growth functions for the 
-    Cubic Galieon model.
+    Asymptotic Cubic Galieon models.
     """
 
     def __init__(self):
@@ -13,21 +13,33 @@ class CubicGalileonExtensions(HorndeskiModel):
         Initialises the Horndeski model class.
         """
         super().__init__()
-
+    
 
     def define_extension(self, ext):
         self.ext = ext
-        if self.ext == 1:
+        if self.ext == 'G3_lin':
             self.define_K('k_1*X', 'k_1')
             self.define_G3('g_31*X*(1+phi/phi_0)', 'g_31, phi_0')
             self.define_G4('0.5', None)
-        if self.ext == 2:
+        elif self.ext == 'G3_quad':
+            self.define_K('k_1*X', 'k_1')
+            self.define_G3('g_31*X*(1+phi/phi_0 + (phi**2)/phi_1)', 'g_31, phi_0, phi_1')
+            self.define_G4('0.5', None)
+        elif self.ext == 'G3_exp':
             self.define_K('k_1*X', 'k_1')
             self.define_G3('g_31*X*exp(phi/phi_0)', 'g_31, phi_0')
             self.define_G4('0.5', None)
-        if self.ext == 3:
+        elif self.ext == 'G3_pow':
             self.define_K('k_1*X', 'k_1')
-            self.define_G3('g_31*X*(1+(phi/phi_0)**n)', 'g_31, phi_0, n')
+            self.define_G3('g_31*X*(1+(phi**n)/phi_0)', 'g_31, phi_0, n')
+            self.define_G4('0.5', None)
+        elif self.ext == 'K_exp':
+            self.define_K('k_1*X*exp(-phi/phi_0)', 'k_1, phi_0')
+            self.define_G3('g_31*X', 'g_31')
+            self.define_G4('0.5', None)
+        elif self.ext == 'K_exp_pow':
+            self.define_K('k_1*X*exp(-(phi**n)/phi_0)', 'k_1, phi_0, n')
+            self.define_G3('g_31*X', 'g_31')
             self.define_G4('0.5', None)
     
 
@@ -95,12 +107,18 @@ class CubicGalileonExtensions(HorndeskiModel):
         k1_Tracker = 6*fphi*(Omega_r0_ref+Omega_m0_ref-1)
         g31_Tracker = 2*fphi*(1-Omega_r0_ref-Omega_m0_ref)
 
-        if self.ext == 1:
+        if self.ext == 'G3_lin':
             K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0]]
-        if self.ext == 2:
-            K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0]]
-        if self.ext == 3:
+        elif self.ext == 'G3_quad':
             K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0], ext_K_G3_G4[1]]
+        elif self.ext == 'G3_exp':
+            K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0]]
+        elif self.ext == 'G3_pow':
+            K_G3_G4_values = [k1_Tracker, g31_Tracker, ext_K_G3_G4[0], ext_K_G3_G4[1]]
+        elif self.ext == 'K_exp':
+            K_G3_G4_values = [k1_Tracker, ext_K_G3_G4[0], g31_Tracker]
+        elif self.ext == 'K_exp_pow':
+            K_G3_G4_values = [k1_Tracker, ext_K_G3_G4[0], ext_K_G3_G4[1], g31_Tracker]
 
         assert len(K_G3_G4_values) == len(self.sym['K_G3_G4_syms']), "Length of Horndeski K_G3_G4_values must match number of defined K, G3, G4 variables."
         self.params['K_G3_G4_values'] = K_G3_G4_values

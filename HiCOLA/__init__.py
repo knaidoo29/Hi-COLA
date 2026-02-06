@@ -12,7 +12,7 @@ from .Frontend.model_horndeski import HorndeskiModel
 from .Frontend.model_cubic_galileon import CubicGalileon
 
 # Cubic Galileon Extensions model
-from .Frontend.model_cubic_galileon_extensions import CubicGalileonExtensions
+from .Frontend.model_asymptotic_cubic_galileon import AsymCubicGalileon
 
 # MCMC sampler
 from .Frontend.sampler import Sampler

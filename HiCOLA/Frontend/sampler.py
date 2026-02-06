@@ -12,7 +12,7 @@ from . import redshift
 from .model_standard import StandardModel
 from .model_horndeski import HorndeskiModel
 from .model_cubic_galileon import CubicGalileon
-from .model_cubic_galileon_extensions import CubicGalileonExtensions
+from .model_asymptotic_cubic_galileon import AsymCubicGalileon
 from .model_ess import ESS
 
 
@@ -127,8 +127,8 @@ class Sampler():
             self.model = HorndeskiModel()
         elif self.settings['model'] == 'CubicGalileon':
             self.model = CubicGalileon()
-        elif self.settings['model'] == 'CubicGalileonExtensions':
-            self.model = CubicGalileonExtensions()
+        elif self.settings['model'] == 'AsymCubicGalileon':
+            self.model = AsymCubicGalileon()
         elif self.settings['model'] == 'ESS':
             self.model = ESS()
         else:
@@ -249,16 +249,53 @@ class Sampler():
 
         if self.settings['model'] == 'CubicGalileonExtensions':
 
-            if self.settings['extension'] >= 1 and self.settings['extension'] <= 3:
+            if self.settings['extension'] == 'G3_lin':
 
                 # check phi_0
                 assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
                 self._check_param_settings('phi_0')
+            
+            elif self.settings['extension'] == 'G3_quad':
                 
-                if self.settings['extension'] == 3:
-                    # check n
-                    assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
-                    self._check_param_settings('n')
+                # check phi_0
+                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+                self._check_param_settings('phi_0')
+                
+                # check phi_1
+                assert 'phi_1' in self.settings, "Parameter 'phi_1' must be defined in settings dictionary."
+                self._check_param_settings('phi_1')
+
+            elif self.settings['extension'] == 'G3_exp':
+                
+                # check phi_0
+                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+                self._check_param_settings('phi_0')
+            
+            elif self.settings['extension'] == 'G3_pow':
+                
+                # check phi_0
+                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+                self._check_param_settings('phi_0')
+                
+                # check n
+                assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
+                self._check_param_settings('n')
+            
+            elif self.settings['extension'] == 'K_exp':
+
+                # check phi_0
+                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+                self._check_param_settings('phi_0')
+
+            elif self.settings['extension'] == 'K_exp_pow':
+
+                # check phi_0
+                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+                self._check_param_settings('phi_0')
+
+                # check n
+                assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
+                self._check_param_settings('n')
 
 
         if self.settings['model'] == 'ESS':
@@ -447,21 +484,76 @@ class Sampler():
                 phi_ini_value = 1e-9
                 phi_prime_ini_value = 1e-9
 
-            if self.settings['model'] == 'CubicGalileonExtensions':
+            if self.settings['model'] == 'AsymCubicGalileon':
                 
-                if self.settings['extension'] >= 1 or self.settings['extension'] <= 3:
+                if self.settings['extension'] == 'G3_lin':
+
                     if self.params_info['phi_0'] == 'fixed':
                         phi0_value = self.fixed_params['phi_0']
                     else:
                         phi0_value = params[self.varied_param2idx['phi_0']]
+                    
                     ext_K_G3_G4 = [phi0_value]
+                
+                elif self.settings['extension'] == 'G3_quad':
 
-                if self.settings['extension'] == 3:
                     if self.params_info['phi_0'] == 'fixed':
+                        phi0_value = self.fixed_params['phi_0']
+                    else:
+                        phi0_value = params[self.varied_param2idx['phi_0']]
+                    
+                    if self.params_info['phi_1'] == 'fixed':
+                        phi1_value = self.fixed_params['phi_1']
+                    else:
+                        phi1_value = params[self.varied_param2idx['phi_1']]
+                    
+                    ext_K_G3_G4 = [phi0_value, phi1_value]
+
+                elif self.settings['extension'] == 'G3_exp':
+                    
+                    if self.params_info['phi_0'] == 'fixed':
+                        phi0_value = self.fixed_params['phi_0']
+                    else:
+                        phi0_value = params[self.varied_param2idx['phi_0']]
+                    
+                    ext_K_G3_G4 = [phi0_value]
+                
+                elif self.settings['extension'] == 'G3_pow':
+                    
+                    if self.params_info['phi_0'] == 'fixed':
+                        phi0_value = self.fixed_params['phi_0']
+                    else:
+                        phi0_value = params[self.varied_param2idx['phi_0']]
+                    
+                    if self.params_info['n'] == 'fixed':
                         n_value = self.fixed_params['n']
                     else:
                         n_value = params[self.varied_param2idx['n']]
-                    ext_K_G3_G4.append(n_value)
+                    
+                    ext_K_G3_G4 = [phi0_value, n_value]
+                
+                elif self.settings['extension'] == 'K_exp':
+                    
+                    if self.params_info['phi_0'] == 'fixed':
+                        phi0_value = self.fixed_params['phi_0']
+                    else:
+                        phi0_value = params[self.varied_param2idx['phi_0']]
+                    
+                    ext_K_G3_G4 = [phi0_value]
+                
+                elif self.settings['extension'] == 'K_exp_pow':
+                    
+                    if self.params_info['phi_0'] == 'fixed':
+                        phi0_value = self.fixed_params['phi_0']
+                    else:
+                        phi0_value = params[self.varied_param2idx['phi_0']]
+                    
+                    if self.params_info['n'] == 'fixed':
+                        n_value = self.fixed_params['n']
+                    else:
+                        n_value = params[self.varied_param2idx['n']]
+                    
+                    ext_K_G3_G4 = [phi0_value, n_value]
                     
             elif self.settings['model'] == 'ESS':
                    
@@ -486,7 +578,7 @@ class Sampler():
                 H0_value, Omega_c_value, Omega_b_value, fphi_value,
                 w0=w0_value, wa=wa_value, mnu=Mnu_value
             )
-        elif self.settings['model'] == 'CubicGalileonExtensions':
+        elif self.settings['model'] == 'AsymCubicGalileon':
             self.model.set_cosmo_params(
                 H0_value, Omega_c_value, Omega_b_value, fphi_value, ext_K_G3_G4,
                 w0=w0_value, wa=wa_value, mnu=Mnu_value
@@ -1085,12 +1177,14 @@ class Sampler():
         return loglike
     
 
-    def init_SN4PantheonPlus(self):
-        pass
+    # TODO: Remove these function or add PantheonPlus and Union3
+
+    # def init_SN4PantheonPlus(self):
+    #     pass
     
 
-    def init_SN4Union3(self):
-        pass
+    # def init_SN4Union3(self):
+    #     pass
 
 
     def init_SN4DES_Dovekie(self):
@@ -1154,12 +1248,14 @@ class Sampler():
         self.interp['DA_vs_x'] = interp1d(self.model.output['x'], DA)
 
 
-    def theory_SN4PantheonPlus(self):
-        pass
+    # TODO: Remove these function or add PantheonPlus and Union3
+    
+    # def theory_SN4PantheonPlus(self):
+    #     pass
     
 
-    def theory_SN4Union3(self):
-        pass
+    # def theory_SN4Union3(self):
+    #     pass
 
 
     def theory_SN4DES_Dovekie(self):
@@ -1182,13 +1278,14 @@ class Sampler():
         mu_theory += 25.
         return mu_theory
     
+    # TODO: Remove these function or add PantheonPlus and Union3
+    
+    # def loglike_SN4PantheonPlus(self):
+    #     pass
 
-    def loglike_SN4PantheonPlus(self):
-        pass
 
-
-    def loglike_SN4Union3(self):
-        pass
+    # def loglike_SN4Union3(self):
+    #     pass
     
 
     def loglike_SN4DES_Dovekie(self, theory):
@@ -2164,7 +2261,7 @@ class Sampler():
         return MLE_dict
     
 
-    def sample2MCSamples(self, sample_dict=None, fname=None, derived=False, derived_limits=[['fphi0', [0., 1.]]]):
+    def sample2MCSamples(self, sample_dict=None, fname=None, derived=False, derived_limits=[['fphi0', [0., 1.]]], label=None):
         """
         Converts sample chains into the getdist MCSamples object.
 
@@ -2202,7 +2299,7 @@ class Sampler():
                 if sample_dict[param]['prior'] is not None:
                     ranges_dict[param] = sample_dict[param]['prior']
 
-        return param_names, MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict)
+        return param_names, MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict, label=label)
     
     
     def quickplot(self, sample_dict=None, fname=None, derived=False, params=None, MLE_dict=None):
