@@ -1105,6 +1105,7 @@ class StandardModel:
                     ans = solve_ivp(
                         self._linear_growth, (x_ini, x_final), y_ini, t_eval=self.output['x'], 
                         args=(self.output['Omega_c0']+self.output['Omega_b0']+self.output['Omega_nu_nr0'],)
+
                     )
                         
                     # Combine solutions

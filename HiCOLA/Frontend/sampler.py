@@ -227,7 +227,7 @@ class Sampler():
                 self.model.define_G3(self.settings['G3']['func'], self.settings['G3']['params'])
                 self.model.define_G4(self.settings['G4']['func'], self.settings['G4']['params'])
 
-            elif self.settings['model'] == 'CubicGalileonExtensions':
+            elif self.settings['model'] == 'AsymCubicGalileon':
 
                 self.model.define_extension(self.settings['extension'])
 
@@ -247,7 +247,7 @@ class Sampler():
         
         ### Add conditions for parameters from other models...
 
-        if self.settings['model'] == 'CubicGalileonExtensions':
+        if self.settings['model'] == 'AsymCubicGalileon':
 
             if self.settings['extension'] == 'G3_lin':
 
@@ -2347,6 +2347,193 @@ class Sampler():
         g = plots.get_subplot_plotter()
         g.triangle_plot([chains], params, filled=True, title_limit=1, markers=markers_dict, marker_args={"lw": 1, 'color':'k', 'ls':'--'})
 
+
+    def dict2chains(self, sample_dict):
+        """
+        Converts a sample dictionary into a sample array.
+
+        Parameters
+        ----------
+        sample_dict : dict
+            Sample dictionary with parameter chains, labels and priors.
+        
+        Returns
+        -------
+        chains : array
+            Sample chain array.
+        weights : array
+            Sample weight values.
+        """
+        chains = [sample_dict[self.varied_idx2param[i]]['chains'] for i in range(0, len(self.varied_param2idx))]
+        chains = np.column_stack(chains)
+        weights = sample_dict['weights']
+        return chains, weights
+
+
+    def sample_chain(self, size, fname, root=0):
+        """
+        Sample parameter values from chains.
+
+        Parameters
+        ----------
+        size : int
+            Number of samples to draw.
+        fname : str
+            Filename for chains.
+        root : int, optional
+            The root to pick for the numerical solver.
+        """
+
+        if self.settings['model'] != 'GR':
+            self.model._lambdify_symbolic()
+        
+        from . import progress
+
+        _, MCMC_dict = self.sample2dict(fname=fname, derived=True)
+        chains, weights = self.dict2chains(MCMC_dict)
+
+        # draw random samples based on sample weights.
+        randint = np.random.choice(np.arange(len(weights)), size=size, p=weights)
+
+        quantities = [
+            'E', 'E_prime', 'phi', 'phi_prime', 'phi_primeprime',
+            'H', 'Dc', 'G_G_4/G_N', 'Omega_DE', 'w_DE', 'beta', 
+            'chi/delta', 'alpha_M', 'alpha_B', 'alpha_K', 'w_phi', 
+            'D', 'Q_s', 'c_s_sq_D', 'c_s_sq', 'f_MG', 
+            'D1', 'f1', 'mu', 'Sigma', 'zeta', 'distmod', 'DV/rd'
+        ]
+
+        sampled_dist = {}
+        for quantity in quantities:
+            sampled_dist[quantity] = []
+
+        for (i, rint) in enumerate(randint):
+            self.run_model(chains[rint])
+            if i == 0:
+                z = self.model.output['z']
+                a = self.model.output['a']
+                x = self.model.output['x']
+            for quantity in quantities:
+                if quantity == 'distmod':
+                    if self.settings['model'] == 'GR':
+                        DL = (1+z)*(1+z)*self.model.output['Dc']/((1+z)*1e-2*self.model.output['H0'])
+                    else:
+                        DL = (1+z)*(1+z)*self.model.output['Dc'][root]/((1+z)*1e-2*self.model.output['H0'][root])
+                    distmod = 5.*np.log10(DL) + 25.
+                    sampled_dist[quantity].append(distmod)
+                elif quantity == 'DV/rd':
+                    if self.settings['model'] == 'GR':
+                        DH = self.model.const['c[km/s]']/self.model.output['H']
+                        DM = self.model.output['Dc']/(1e-2*self.model.output['H0'])
+                    else:
+                        DH = self.model.const['c[km/s]']/self.model.output['H'][root]
+                        DM = self.model.output['Dc'][root]/(1e-2*self.model.output['H0'][root])
+                    DV = (z*DH*DM**2)**(1/3)
+                    sampled_dist[quantity].append(DV/self.model.output['r_drag'])
+                else:
+                    if self.settings['model'] == 'GR':
+                        sampled_dist[quantity].append(self.model.output[quantity])
+                    else:
+                        sampled_dist[quantity].append(self.model.output[quantity][root])
+            progress.progress_bar(i, len(randint), explanation=' -> Sampling Chain', indexing=True)
+        self.sampled_dist = sampled_dist
+        self.sampled_dist['mcmc_ID'] = randint
+        self.sampled_dist['z'] = z
+        self.sampled_dist['a'] = a
+        self.sampled_dist['x'] = x
+
+        return self.sampled_dist
+    
+
+    def sample_MLE(self, fname, root=0):
+        """
+        Sample parameter values from chains.
+
+        Parameters
+        ----------
+        size : int
+            Number of samples to draw.
+        fname : str
+            Filename for chains.
+        root : int, optional
+            The root to pick for the numerical solver.
+        """
+
+        if self.settings['model'] != 'GR':
+            self.model._lambdify_symbolic()
+
+        MLE_dict = self.MLE2dict(fname=fname, derived=True)
+
+        MLE_sample = np.array([MLE_dict[self.varied_idx2param[i]]['MLE'] for i in range(0, len(self.varied_param2idx))])
+
+        quantities = [
+            'E', 'E_prime', 'phi', 'phi_prime', 'phi_primeprime',
+            'H', 'Dc', 'G_G_4/G_N', 'Omega_DE', 'w_DE', 'beta', 
+            'chi/delta', 'alpha_M', 'alpha_B', 'alpha_K', 'w_phi', 
+            'D', 'Q_s', 'c_s_sq_D', 'c_s_sq', 'f_MG', 
+            'D1', 'f1', 'mu', 'Sigma', 'zeta', 'distmod', 'DV/rd',
+        ]
+
+        MLE_dist = {}
+        for quantity in quantities:
+            MLE_dist[quantity] = []
+
+        self.run_model(MLE_sample)
+        z = self.model.output['z']
+        a = self.model.output['a']
+        x = self.model.output['x']
+        for quantity in quantities:
+            if quantity == 'distmod':
+                if self.settings['model'] == 'GR':
+                    DL = (1+z)*(1+z)*self.model.output['Dc']/((1+z)*1e-2*self.model.output['H0'])
+                else:
+                    DL = (1+z)*(1+z)*self.model.output['Dc'][root]/((1+z)*1e-2*self.model.output['H0'][root])
+                distmod = 5.*np.log10(DL) + 25.
+                MLE_dist[quantity] = distmod
+            elif quantity == 'DV/rd':
+                if self.settings['model'] == 'GR':
+                    DH = self.model.const['c[km/s]']/self.model.output['H']
+                    DM = self.model.output['Dc']/(1e-2*self.model.output['H0'])
+                else:
+                    DH = self.model.const['c[km/s]']/self.model.output['H'][root]
+                    DM = self.model.output['Dc'][root]/(1e-2*self.model.output['H0'][root])
+                DV = (z*DH*DM**2)**(1/3)
+                MLE_dist[quantity] = DV/self.model.output['r_drag']
+            else:
+                if self.settings['model'] == 'GR':
+                    MLE_dist[quantity] = self.model.output[quantity]
+                else:
+                    MLE_dist[quantity] = self.model.output[quantity][root]
+        
+        self.MLE_dist = MLE_dist
+        self.MLE_dist['z'] = z
+        self.MLE_dist['a'] = a
+        self.MLE_dist['x'] = x
+
+        return self.MLE_dist
+    
+
+    def save_sampled_chain(self, fname=None):
+        """
+        Save sampled quantities from a chain to a file.
+        """
+        if fname is None:
+            fname = self.fname
+        np.savez(
+            fname + '_sampled_chains.npz', **self.sampled_dist
+        )
+
+
+    def save_MLE_chain(self, fname=None):
+        """
+        Save MLE quantities from a chain to a file.
+        """
+        if fname is None:
+            fname = self.fname
+        np.savez(
+            fname + '_MLE_chains.npz', **self.MLE_dist
+        )
+    
 
     def clean(self):
         """
