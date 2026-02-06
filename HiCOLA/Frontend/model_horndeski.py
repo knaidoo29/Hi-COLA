@@ -484,12 +484,12 @@ class HorndeskiModel(StandardModel):
         self.get_calE() # units H0^{2} * Mp^2
         self.get_calP() # units H0^{2} * Mp^2
         self.get_theta() # units H0 * Mp^2
+        
+        theta = self.symfunc['theta'].subs({self.sym['X']: (self.sym['E']**2 * self.sym['phi_prime']**2)/2})
 
-        X_prime = (self.sym['E']**2)*self.sym['phi_prime']*(self.symfunc['phi_primeprime'] + self.symfunc['E_prime']*self.sym['phi_prime']/self.sym['E'])
-
-        theta_prime = self.symfunc['E_prime']*sym.diff(self.symfunc['theta'], self.sym['E'])
-        theta_prime += self.sym['phi_prime']*sym.diff(self.symfunc['theta'], self.sym['phi'])
-        theta_prime += X_prime*sym.diff(self.symfunc['theta'], self.sym['X'])
+        theta_prime = self.symfunc['E_prime']*sym.diff(theta, self.sym['E'])
+        theta_prime += self.sym['phi_prime']*sym.diff(theta, self.sym['phi'])
+        theta_prime += self.symfunc['phi_primeprime']*sym.diff(theta, self.sym['phi_prime'])
 
         self.symfunc['alpha0'] = theta_prime/self.sym['E']
         self.symfunc['alpha0'] += self.symfunc['theta']/self.sym['E']
@@ -2503,7 +2503,7 @@ class HorndeskiModel(StandardModel):
                     fname_expansion = fname_prefix + 'solution_%i_expansion.txt' % idx
                 else:
                     fname_expansion = fname_prefix + 'expansion.txt'
-                data = np.column_stack([self.output['a'], self.output['E'][idx], self.output['E_prime/E'][idx]/self.output['E'][idx]])
+                data = np.column_stack([self.output['a'], self.output['E'][idx], self.output['E_prime'][idx]/self.output['E'][idx]])
                 np.savetxt(fname_expansion, data, fmt=['%.4e', '%.4e', '%.4e'])
 
                 if len(self.output['Omega_c0']) != 1:

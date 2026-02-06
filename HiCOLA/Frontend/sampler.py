@@ -2398,7 +2398,7 @@ class Sampler():
         quantities = [
             'E', 'E_prime', 'phi', 'phi_prime', 'phi_primeprime',
             'H', 'Dc', 'G_G_4/G_N', 'Omega_DE', 'w_DE', 'beta', 
-            'chi/delta', 'alpha_M', 'alpha_B', 'alpha_K', 'w_phi', 
+            'chi/delta', 'M_star_sq', 'alpha_M', 'alpha_B', 'alpha_K', 'w_phi', 
             'D', 'Q_s', 'c_s_sq_D', 'c_s_sq', 'f_MG', 
             'D1', 'f1', 'mu', 'Sigma', 'zeta', 'distmod', 'DV/rd'
         ]
@@ -2469,7 +2469,7 @@ class Sampler():
         quantities = [
             'E', 'E_prime', 'phi', 'phi_prime', 'phi_primeprime',
             'H', 'Dc', 'G_G_4/G_N', 'Omega_DE', 'w_DE', 'beta', 
-            'chi/delta', 'alpha_M', 'alpha_B', 'alpha_K', 'w_phi', 
+            'chi/delta', 'M_star_sq', 'alpha_M', 'alpha_B', 'alpha_K', 'w_phi', 
             'D', 'Q_s', 'c_s_sq_D', 'c_s_sq', 'f_MG', 
             'D1', 'f1', 'mu', 'Sigma', 'zeta', 'distmod', 'DV/rd',
         ]
