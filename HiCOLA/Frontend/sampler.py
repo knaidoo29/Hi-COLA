@@ -53,7 +53,8 @@ class Sampler():
             'theta_star', 
             'r_drag',
             'c_s_sq_gt_0', 
-            'Q_s_gt_0'
+            'Q_s_gt_0',
+            'ISW_sign'
         ]
         self.derived_labels = [
             r'H_{0}', 
@@ -69,7 +70,8 @@ class Sampler():
             r'\theta_{*}', 
             r'r_{d}',
             r'c_{s}^{2}>0', 
-            r'Q_{s}>0'
+            r'Q_{s}>0',
+            r'ISW>0'
         ]
 
 
@@ -324,7 +326,7 @@ class Sampler():
             'Planck', 'H0_LOCAL_ALL', 'H0_LOCAL_SHOES', 'H0_LOCAL_MCP', 'H0_LOCAL_TRGB', 'H0_LOCAL_Type2SN',
             'DESI_DR2_BAO_FULL', 'DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2',
             'DESI_DR2_BAO_LRG3_ELG1', 'DESI_DR2_BAO_ELG2', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA',
-            'DES_SN_Dovekie', 'ISW_SIGN', 'stability'
+            'DES_SN_Dovekie'
         ]
         self.constraint2idx = {}
 
@@ -635,9 +637,21 @@ class Sampler():
         """
         None_value = -4043.
         if self.settings['model'] == 'GR':
-            value = self.model.output[key]
+            if key == 'ISW_sign':
+                value = 1.
+            else:
+                value = self.model.output[key]
         else:
-            value = self.model.output[key][root]
+            if key == 'ISW_sign':
+                chi = self.model.output['Dc'][root]
+                intf = (self.model.output['D1'][root]**2)*self.model.output['Sigma'][root]*self.model.output['E'][root]*(1-self.model.output['f1'][root]-self.model.output['zeta'][root])
+                f_ISW = simpson(intf[::-1], x=chi[::-1])
+                if f_ISW < 0:
+                    value = 0.
+                else:
+                    value = 1.
+            else:
+                value = self.model.output[key][root]
         if value is None:
             return None_value
         elif value == True:
@@ -1309,39 +1323,6 @@ class Sampler():
         chi2 = chit2 - (B**2 / self.C_DES_SN_Dovekie)
         loglike = -0.5*self.log_norm_DES_SN_Dovekie - 0.5*chi2
         return loglike
-    
-
-    def loglike_ISW_SIGN(self, root=0):
-        """
-        Implement an ISW sign likelihood which test whether the integral:
-        f_ISW = int D1**2 * Sigma * E * (1 - f - zeta)  dchi.
-        is positive.
-
-        Parameters
-        ----------
-        root : int, optional
-            The solution of the numerical solver to look at.
-
-        Returns
-        -------
-        f_ISW : float
-            A constant proportional to the amplitude of the ISW signal.
-        """
-        if self.settings['model'] == 'GR':
-            chi = self.model.output['Dc']
-            intf = (self.model.output['D1']**2)*self.model.output['Sigma']*self.model.output['E']*(1-self.model.output['f1']-self.model.output['zeta'])
-        else:
-            chi = self.model.output['Dc'][root]
-            intf = (self.model.output['D1'][root]**2)*self.model.output['Sigma'][root]*self.model.output['E'][root]*(1-self.model.output['f1'][root]-self.model.output['zeta'][root])
-        # Note: removed WISE nz integral to make this a purely ISW sign function
-        # nz_WISE = 61.3 - 9.96/(0.142+self.model.output['z']) - 85.*self.model.output['z']
-        # nz_WISE[np.where(nz_WISE < 0.)[0]] = 0.
-        # intf *= nz_WISE
-        f_ISW = simpson(intf[::-1], x=chi[::-1])
-        if f_ISW < 0:
-            return -np.inf
-        else:
-            return 0.
 
 
     def initialise(self):
@@ -1498,14 +1479,6 @@ class Sampler():
             if self.likelihood_switch['DES_SN_Dovekie']:
                 theory = self.theory_SN4DES_Dovekie()
                 loglike += self.loglike_SN4DES_Dovekie(theory)
-
-            if self.likelihood_switch['ISW_SIGN']:
-                loglike += self.loglike_ISW_SIGN(root=self.root)
-
-            if self.likelihood_switch['stability']:
-                if self.settings['model'] != 'GR':
-                    if self.model.output['c_s_sq_gt_0'][self.root] == False or self.model.output['Q_s_gt_0'][self.root] == False:
-                        loglike += -np.inf
             
             return loglike, blob
     
@@ -1535,9 +1508,11 @@ class Sampler():
                 blob = np.zeros(len(self.derived_keys))
                 loglike = -np.inf
         
-        if self.sampler_method == 'dynesty':
-            if not np.isfinite(loglike):
-                loglike = -1e300  # huge negative log-likelihood
+        # TODO: decide whether we should keep this for all samplers or just specific settings for some.
+        # No nan's is useful for all samplers, but -infinites are okay for emcee but not for pocoMC or dynesty
+        # if self.sampler_method == 'dynesty' or self.sampler_method == 'pocoMC':
+        if not np.isfinite(loglike):
+            loglike = -1e300  # huge negative log-likelihood
         
         if self.derived:
             return loglike, blob
@@ -1579,30 +1554,38 @@ class Sampler():
         print('Time per likelihood call:', (t2-t1)/size)
 
 
-    def set_dynesty_settings(self, nlive=100, bound='multi', sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60):
+    def set_dynesty_settings(
+            self, dynamic=True, n_effective=100, nlive=100, bound='multi', sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60
+        ):
         """
         Defined dynesty settings.
         
         Parameters
         ----------
-        nlive : int
+        dynamic : bool, optional
+            If true the dynamic nested sampler will be used.
+        n_effective: int, optional
+            For dynamic runs this tells dynesty how many effective samples it needs to have.
+        nlive : int, optional
             Live points in the sampler.
-        bound : str
+        bound : str, optional
             Dynesty bound type.
-        sample : str
+        sample : str, optional
             Sampling type.
-        slices : int
+        slices : int, optional
             If using a slicing methods, this defines the number of slices to use.
-        walks : int
+        walks : int, optional
             The number of walks to use if the sampling method is 'rwalks'.
-        update_interval : float
+        update_interval : float, optional
             The update interval used for parallel processed jobs, if the code is not parallelised then this is ignored.
-        dlogz : float
+        dlogz : float, optional
             The stopping criteria for nested sampling.
-        checkpoint_interval : int
+        checkpoint_interval : int, optional
             The time in seconds between checkpoint saves.
         """
         self.dynesty_settings = {
+            'dynamic': dynamic,
+            'n_effective': n_effective,
             'nlive': nlive,
             'bound': bound,
             'update_interval': update_interval,
@@ -1620,7 +1603,7 @@ class Sampler():
             self.dynesty_settings['walks'] = None
 
 
-    def set_emcee_settings(self, walkers=62, burnin=100, steps=1000):
+    def set_emcee_settings(self, walkers=64, burnin=100, steps=1000):
         """
         Defined emcee settings.
         
@@ -1646,13 +1629,14 @@ class Sampler():
         
         Parameters
         ----------
-        nwalkers : int, optional
-            Number of walkers in the ensemble.
-        burnin : int, optional
-            The number of burn in steps.
-        steps: int, optional
-            Number of steps for the walkers to move. 
+        n_active : int, optional
+            The number of active particles (walkers / samples) at each iteration.
+        n_effective : int, optional
+            The target effective sample size (ESS) of the weighted particle set.
+        dynamic : bool, optional
+            Enables adaptive termination and resampling.
         checkpoint_iter : int, optional
+            The iteration frequency to output checkpoint files.
         """
         self.pocomc_settings = {
             'n_effective': n_effective,
@@ -1694,7 +1678,7 @@ class Sampler():
         
         if self.sampler_method == 'dynesty':
 
-            from dynesty import NestedSampler
+            from dynesty import NestedSampler, DynamicNestedSampler
 
             if checkpoint:
                 if resume == False:
@@ -1718,19 +1702,36 @@ class Sampler():
             
             if processes == 1:
                 if resume:
-                    sampler = NestedSampler.restore(checkpoint_fname)
+                    if self.dynesty_settings['dynamic'] == True:
+                        sampler = DynamicNestedSampler.restore(checkpoint_fname)
+                    else:
+                        sampler = NestedSampler.restore(checkpoint_fname)
                     sampler.run_nested(resume=True, dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
                 else:
-                    sampler = NestedSampler(
-                        self.loglike, self.ptform, self.Nvaried,
-                        nlive=self.dynesty_settings['nlive'],
-                        bound=self.dynesty_settings['bound'],
-                        sample=self.dynesty_settings['sample'],
-                        slices=self.dynesty_settings['slices'],
-                        walks=self.dynesty_settings['walks'],
-                        blob=self.derived
-                    )
-                    sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
+                    if self.dynesty_settings['dynamic'] == True:
+                        sampler = DynamicNestedSampler(
+                            self.loglike, self.ptform, self.Nvaried,
+                            nlive=self.dynesty_settings['nlive'],
+                            bound=self.dynesty_settings['bound'],
+                            sample=self.dynesty_settings['sample'],
+                            slices=self.dynesty_settings['slices'],
+                            walks=self.dynesty_settings['walks'],
+                            blob=self.derived
+                        )
+                        sampler.run_nested(
+                            dlogz_init=self.dynesty_settings['dlogz'], n_effective=self.dynesty_settings['n_effective'],
+                            checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
+                    else:
+                        sampler = NestedSampler(
+                            self.loglike, self.ptform, self.Nvaried,
+                            nlive=self.dynesty_settings['nlive'],
+                            bound=self.dynesty_settings['bound'],
+                            sample=self.dynesty_settings['sample'],
+                            slices=self.dynesty_settings['slices'],
+                            walks=self.dynesty_settings['walks'],
+                            blob=self.derived
+                        )
+                        sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
 
             else:
                 
@@ -1742,20 +1743,39 @@ class Sampler():
             
                 with Pool(processes, self.loglike, self.ptform) as pool:
                     if resume:
-                        sampler = NestedSampler.restore(checkpoint_fname)
+                        if self.dynesty_settings['dynamic'] == True:
+                            sampler = DynamicNestedSampler.restore(checkpoint_fname)
+                        else:
+                            sampler = NestedSampler.restore(checkpoint_fname)
                         sampler.run_nested(resume=True, dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
                     else:
-                        sampler = NestedSampler(
-                            pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
-                            nlive=self.dynesty_settings['nlive'],
-                            bound=self.dynesty_settings['bound'],
-                            sample=self.dynesty_settings['sample'],
-                            slices=self.dynesty_settings['slices'],
-                            walks=self.dynesty_settings['walks'],
-                            blob=self.derived,
-                            update_interval=self.dynesty_settings['update_interval']
-                        )
-                        sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
+                        if self.dynesty_settings['dynamic'] == True:
+                            sampler = DynamicNestedSampler(
+                                pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
+                                nlive=self.dynesty_settings['nlive'],
+                                bound=self.dynesty_settings['bound'],
+                                sample=self.dynesty_settings['sample'],
+                                slices=self.dynesty_settings['slices'],
+                                walks=self.dynesty_settings['walks'],
+                                blob=self.derived,
+                                update_interval=self.dynesty_settings['update_interval']
+                            )
+                            sampler.run_nested(
+                                dlogz_init=self.dynesty_settings['dlogz'], n_effective=self.dynesty_settings['n_effective'], 
+                                checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval']
+                            )
+                        else:
+                            sampler = NestedSampler(
+                                pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
+                                nlive=self.dynesty_settings['nlive'],
+                                bound=self.dynesty_settings['bound'],
+                                sample=self.dynesty_settings['sample'],
+                                slices=self.dynesty_settings['slices'],
+                                walks=self.dynesty_settings['walks'],
+                                blob=self.derived,
+                                update_interval=self.dynesty_settings['update_interval']
+                            )
+                            sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
 
             self.sampler = sampler
 
@@ -1873,7 +1893,10 @@ class Sampler():
                     prior=prior,
                     likelihood=self.loglike,
                     output_dir='pocoMC_states',
-                    output_label=self.fname
+                    output_label=self.fname,
+                    n_effective=self.pocomc_settings['n_effective'], 
+                    n_active=self.pocomc_settings['n_active'],
+                    dynamic=self.pocomc_settings['dynamic']
                 )
 
                 sampler.run(resume_state_path=checkpoint_fname, save_every=save_every)
@@ -1889,7 +1912,10 @@ class Sampler():
                     likelihood=self.loglike,
                     pool=processes,
                     output_dir='pocoMC_states',
-                    output_label=self.fname
+                    output_label=self.fname,
+                    n_effective=self.pocomc_settings['n_effective'], 
+                    n_active=self.pocomc_settings['n_active'],
+                    dynamic=self.pocomc_settings['dynamic']
                 )
 
                 sampler.run(resume_state_path=checkpoint_fname, save_every=save_every)

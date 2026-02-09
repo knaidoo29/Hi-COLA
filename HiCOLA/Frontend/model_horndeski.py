@@ -1345,55 +1345,55 @@ class HorndeskiModel(StandardModel):
 
                 check = True
 
-                if self.output['beta'] is None or np.isfinite(self.output['beta']).all() == False:
-                    check = False
+                keys = ['M_star_sq', 'alpha_B', 'alpha_M', 'c_s_sq_D']
+
+                check = True
+                for key in keys:
+                    if self.output[key] is None or np.isfinite(self.output[key]).all() == False:
+                        check = False
 
                 if check:
-                    mu = 1 + self.output['beta']
-                    if self.symfunc['alpha_M'].is_zero:
-                        Sigma = np.copy(mu)
-                        gamma = np.ones(len(mu))
-                    else:
-                        # using equation 6 and 7 from https://arxiv.org/pdf/2401.06221
-                        beta1 = 3*(self.output['rho_phi']/(self.output['H']**2))*(1 + self.output['w_phi']) + (self.output['E_prime']/self.output['E'])*(4 + self.output['alpha_B']) + self.output['alpha_B_prime']
-                        beta2 = self.output['alpha_B'] + 2*self.output['alpha_M']
-                        factor = 2*beta1 + 2*(1+self.output['alpha_M'])*beta2
-                        factor /= 2*beta1 + (2+self.output['alpha_M'])*beta2
-                        gamma = 2./factor - 1.
-                        Sigma = factor*np.copy(mu)
+                    # Note: Replaced mu = 1 + beta with full equation from Pogosian and Silvestri -- 1606.05339
+                    # mu = 1 + self.output['beta']
+                    mu = 1/self.output['M_star_sq']
+                    mu *= 1 + (2*(0.5*self.output['alpha_B']+self.output['alpha_M'])**2)/self.output['c_s_sq_D']
+                    Sigma = 1/self.output['M_star_sq']
+                    Sigma *= 1 + (0.5*self.output['alpha_B']+self.output['alpha_M'])*(self.output['alpha_B']+self.output['alpha_M'])/self.output['c_s_sq_D']
+                    gamma = 1 + self.output['alpha_B']*(0.5*self.output['alpha_B']+self.output['alpha_M'])/self.output['c_s_sq_D']
+                    gamma /= 1 + (2*(0.5*self.output['alpha_B']+self.output['alpha_M'])**2)/self.output['c_s_sq_D']
                 else:
                     mu, Sigma, gamma = None, None, None
 
             elif self.output['E'].ndim == 2:
 
                 mu = np.zeros(np.shape(self.output['E']))
-                gamma = np.zeros(np.shape(self.output['E']))
                 Sigma = np.zeros(np.shape(self.output['E']))
+                gamma = np.zeros(np.shape(self.output['E']))
 
                 for idx in range(0, len(self.output['Omega_c0'])):
 
                     check = True
 
-                    if self.output['beta'][idx] is None or np.isfinite(self.output['beta'][idx]).all() == False:
-                        check = False
+                    keys = ['M_star_sq', 'alpha_B', 'alpha_M', 'c_s_sq_D']
 
+                    check = True
+                    for key in keys:
+                        if self.output[key] is None or np.isfinite(self.output[key][idx]).all() == False:
+                            check = False
+                    
                     if check:
-                        mu[idx] = 1 + self.output['beta'][idx]
-                        if self.symfunc['alpha_M'].is_zero:
-                            Sigma[idx] = np.copy(mu[idx])
-                            gamma[idx] = np.ones(len(mu[idx]))
-                        else:
-                            # using equation 6 and 7 from https://arxiv.org/pdf/2401.06221
-                            beta1 = 3*(self.output['rho_phi'][idx]/(self.output['H'][idx]**2))*(1 + self.output['w_phi'][idx]) + (self.output['E_prime'][idx]/self.output['E'][idx])*(4 + self.output['alpha_B'][idx]) + self.output['alpha_B_prime'][idx]
-                            beta2 = self.output['alpha_B'][idx] + 2*self.output['alpha_M'][idx]
-                            factor = 2*beta1 + 2*(1+self.output['alpha_M'][idx])*beta2
-                            factor /= 2*beta1 + (2+self.output['alpha_M'][idx])*beta2
-                            gamma[idx] = 2./factor - 1.
-                            Sigma[idx] = factor*np.copy(mu[idx])
+                        # Note: Replaced mu = 1 + beta with full equation from Pogosian and Silvestri -- 1606.05339
+                        # mu[idx] = 1 + self.output['beta'][idx]
+                        mu[idx] = 1/self.output['M_star_sq'][idx]
+                        mu[idx] *= 1 + (2*(0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])**2)/self.output['c_s_sq_D'][idx]
+                        Sigma[idx] = 1/self.output['M_star_sq'][idx]
+                        Sigma[idx] *= 1 + (0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])*(self.output['alpha_B'][idx]+self.output['alpha_M'][idx])/self.output['c_s_sq_D'][idx]
+                        gamma[idx] = 1 + self.output['alpha_B'][idx]*(0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])/self.output['c_s_sq_D'][idx]
+                        gamma[idx] /= 1 + (2*(0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])**2)/self.output['c_s_sq_D'][idx]
                     else:
                         mu[idx] = np.nan * np.ones(len(self.output['x']))
-                        gamma[idx] = np.nan * np.ones(len(self.output['x']))
                         Sigma[idx] = np.nan * np.ones(len(self.output['x']))
+                        gamma[idx] = np.nan * np.ones(len(self.output['x']))
             
             else:
                 mu, Sigma, gamma = None, None, None
