@@ -804,7 +804,7 @@ class HorndeskiModel(StandardModel):
         self._lambdified = False
 
 
-    def construct_model(self, lambdify=True):
+    def construct_model(self, lambdify=True, simplify=True):
         """
         Constructs Horndeski model with user defined functions.
 
@@ -812,6 +812,8 @@ class HorndeskiModel(StandardModel):
         ----------
         lambdify : bool, optional
             Lambdify symbolic expressions
+        simplify : bool, optional
+            This will instruct the code to simplify functions used in the ODE solver.
         """
 
         if self.verbose:
@@ -868,7 +870,7 @@ class HorndeskiModel(StandardModel):
 
             self.get_E_prime()
             E_prime = self.symfunc['E_prime'].subs(sub_dict)
-
+            
             self.get_phi_primeprime()
             phi_primeprime = self.symfunc['phi_primeprime'].subs(sub_dict)
 
@@ -922,6 +924,11 @@ class HorndeskiModel(StandardModel):
 
             self.get_f_MG()
             f_MG = self.symfunc['f_MG'].subs(sub_dict)
+
+            if simplify:
+                fried_closure = sym.simplify(fried_closure)
+                E_prime = sym.simplify(E_prime)
+                phi_primeprime = sym.simplify(phi_primeprime)
 
             if self.verbose:
                 print(' - substituting X = 0.5 * E^2 * phi_prime^2')
@@ -1001,6 +1008,13 @@ class HorndeskiModel(StandardModel):
             c_s_sq = c_s_sq.subs(sub_dict)
 
             f_MG = f_MG.subs(sub_dict)
+
+            if simplify:
+                fried_closure = sym.simplify(fried_closure)
+                fried_closure_dE = sym.simplify(fried_closure_dE)
+                fried_closure_dE2 = sym.simplify(fried_closure_dE2)
+                E_prime = sym.simplify(E_prime)
+                phi_primeprime = sym.simplify(phi_primeprime)
 
             # we will copy these substituted and simplified functions to the class symfunc dictionary, we avoided 
             # doing this before as some of these are re-called and redefined in the 'get' functions.
@@ -1176,7 +1190,7 @@ class HorndeskiModel(StandardModel):
         return variables
 
 
-    def _lambda_fried_closure(self, E, variables, timeout):
+    def _lambda_fried_closure(self, E, variables):
         """
         Wrapper function for closure relation.
 
@@ -1186,13 +1200,11 @@ class HorndeskiModel(StandardModel):
             Normalised Hubble function.
         variables : array
             Variables for symbolic functions, excluding leading E term.
-        timeout : float, optional
-            Time in seconds to force the solver to fail.
         """
         return self.lambda_funcs['fried_closure'](E, *variables)
     
 
-    def _lambda_fried_closure_dE(self, E, variables, timeout):
+    def _lambda_fried_closure_dE(self, E, variables):
         """
         Wrapper function for the derivative of the closure relation wrt E.
 
@@ -1202,13 +1214,11 @@ class HorndeskiModel(StandardModel):
             Normalised Hubble function.
         variables : array
             Variables for symbolic functions, excluding leading E term.
-        timeout : float, optional
-            Time in seconds to force the solver to fail.
         """
         return self.lambda_funcs['fried_closure_dE'](E, *variables)
     
     
-    def _lambda_fried_closure_dE2(self, E, variables, timeout):
+    def _lambda_fried_closure_dE2(self, E, variables):
         """
         Wrapper function for the second derivative of the closure relation wrt E.
 
@@ -1218,8 +1228,6 @@ class HorndeskiModel(StandardModel):
             Normalised Hubble function.
         variables : array
             Variables for symbolic functions, excluding leading E term.
-        timeout : float, optional
-            Time in seconds to force the solver to fail.
         """
         return self.lambda_funcs['fried_closure_dE2'](E, *variables)
     
@@ -1241,11 +1249,15 @@ class HorndeskiModel(StandardModel):
             The solution for E to solve the closure relation.
         """
 
+        # Note: Omitting fprime2 as this seems to be the source of instabilities in some of the outputs.
+        # This is because fprime2 uses Halley's method rather than Newton's method. The second can amplify
+        # noise which I believe is the source of this instability.
+
         E = newton(
-            lambda _E: self._lambda_fried_closure(_E, variables, timeout), 
+            lambda _E: self._lambda_fried_closure(_E, variables), 
             E_guess,
-            fprime = lambda _E: self._lambda_fried_closure_dE(_E, variables, timeout), 
-            fprime2 = lambda _E: self._lambda_fried_closure_dE2(_E, variables, timeout), 
+            fprime = lambda _E: self._lambda_fried_closure_dE(_E, variables), 
+            # fprime2 = lambda _E: self._lambda_fried_closure_dE2(_E, variables), 
             tol=self.newton_tol
         )
 
