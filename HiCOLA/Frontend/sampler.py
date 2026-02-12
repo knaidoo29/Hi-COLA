@@ -1555,17 +1555,13 @@ class Sampler():
 
 
     def set_dynesty_settings(
-            self, dynamic=True, n_effective=100, nlive=100, bound='multi', sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60
+            self, nlive=100, bound='multi', sample='rslice', slices=5, walks=20, update_interval=0.5, dlogz=0.5, checkpoint_interval=60
         ):
         """
         Defined dynesty settings.
         
         Parameters
         ----------
-        dynamic : bool, optional
-            If true the dynamic nested sampler will be used.
-        n_effective: int, optional
-            For dynamic runs this tells dynesty how many effective samples it needs to have.
         nlive : int, optional
             Live points in the sampler.
         bound : str, optional
@@ -1584,8 +1580,6 @@ class Sampler():
             The time in seconds between checkpoint saves.
         """
         self.dynesty_settings = {
-            'dynamic': dynamic,
-            'n_effective': n_effective,
             'nlive': nlive,
             'bound': bound,
             'update_interval': update_interval,
@@ -1702,36 +1696,19 @@ class Sampler():
             
             if processes == 1:
                 if resume:
-                    if self.dynesty_settings['dynamic'] == True:
-                        sampler = DynamicNestedSampler.restore(checkpoint_fname)
-                    else:
-                        sampler = NestedSampler.restore(checkpoint_fname)
+                    sampler = NestedSampler.restore(checkpoint_fname)
                     sampler.run_nested(resume=True, dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
                 else:
-                    if self.dynesty_settings['dynamic'] == True:
-                        sampler = DynamicNestedSampler(
-                            self.loglike, self.ptform, self.Nvaried,
-                            nlive=self.dynesty_settings['nlive'],
-                            bound=self.dynesty_settings['bound'],
-                            sample=self.dynesty_settings['sample'],
-                            slices=self.dynesty_settings['slices'],
-                            walks=self.dynesty_settings['walks'],
-                            blob=self.derived
-                        )
-                        sampler.run_nested(
-                            dlogz_init=self.dynesty_settings['dlogz'], n_effective=self.dynesty_settings['n_effective'],
-                            checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
-                    else:
-                        sampler = NestedSampler(
-                            self.loglike, self.ptform, self.Nvaried,
-                            nlive=self.dynesty_settings['nlive'],
-                            bound=self.dynesty_settings['bound'],
-                            sample=self.dynesty_settings['sample'],
-                            slices=self.dynesty_settings['slices'],
-                            walks=self.dynesty_settings['walks'],
-                            blob=self.derived
-                        )
-                        sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
+                    sampler = NestedSampler(
+                        self.loglike, self.ptform, self.Nvaried,
+                        nlive=self.dynesty_settings['nlive'],
+                        bound=self.dynesty_settings['bound'],
+                        sample=self.dynesty_settings['sample'],
+                        slices=self.dynesty_settings['slices'],
+                        walks=self.dynesty_settings['walks'],
+                        blob=self.derived
+                    )
+                    sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
 
             else:
                 
@@ -1743,39 +1720,20 @@ class Sampler():
             
                 with Pool(processes, self.loglike, self.ptform) as pool:
                     if resume:
-                        if self.dynesty_settings['dynamic'] == True:
-                            sampler = DynamicNestedSampler.restore(checkpoint_fname)
-                        else:
-                            sampler = NestedSampler.restore(checkpoint_fname)
+                        sampler = NestedSampler.restore(checkpoint_fname)
                         sampler.run_nested(resume=True, dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
                     else:
-                        if self.dynesty_settings['dynamic'] == True:
-                            sampler = DynamicNestedSampler(
-                                pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
-                                nlive=self.dynesty_settings['nlive'],
-                                bound=self.dynesty_settings['bound'],
-                                sample=self.dynesty_settings['sample'],
-                                slices=self.dynesty_settings['slices'],
-                                walks=self.dynesty_settings['walks'],
-                                blob=self.derived,
-                                update_interval=self.dynesty_settings['update_interval']
-                            )
-                            sampler.run_nested(
-                                dlogz_init=self.dynesty_settings['dlogz'], n_effective=self.dynesty_settings['n_effective'], 
-                                checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval']
-                            )
-                        else:
-                            sampler = NestedSampler(
-                                pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
-                                nlive=self.dynesty_settings['nlive'],
-                                bound=self.dynesty_settings['bound'],
-                                sample=self.dynesty_settings['sample'],
-                                slices=self.dynesty_settings['slices'],
-                                walks=self.dynesty_settings['walks'],
-                                blob=self.derived,
-                                update_interval=self.dynesty_settings['update_interval']
-                            )
-                            sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
+                        sampler = NestedSampler(
+                            pool.loglike, pool.prior_transform, self.Nvaried, pool=pool,
+                            nlive=self.dynesty_settings['nlive'],
+                            bound=self.dynesty_settings['bound'],
+                            sample=self.dynesty_settings['sample'],
+                            slices=self.dynesty_settings['slices'],
+                            walks=self.dynesty_settings['walks'],
+                            blob=self.derived,
+                            update_interval=self.dynesty_settings['update_interval']
+                        )
+                        sampler.run_nested(dlogz=self.dynesty_settings['dlogz'], checkpoint_file=checkpoint_fname, checkpoint_every=self.dynesty_settings['checkpoint_interval'])
 
             self.sampler = sampler
 
