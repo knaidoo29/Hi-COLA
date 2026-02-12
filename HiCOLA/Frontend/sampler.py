@@ -215,6 +215,18 @@ class Sampler():
                 self.solver['which_root'] = self.settings['solver']['which_root']
             else:
                 self.solver['which_root'] = 0
+
+            # check which_root
+            if 'rtol' in self.settings['solver']:
+                self.solver['rtol'] = self.settings['solver']['rtol']
+            else:
+                self.solver['rtol'] = 1e-12
+            
+            # check which_root
+            if 'atol' in self.settings['solver']:
+                self.solver['atol'] = self.settings['solver']['atol']
+            else:
+                self.solver['atol'] = 1e-12
         
         
         if self.settings['model'] != 'GR':
@@ -619,7 +631,8 @@ class Sampler():
             self.model.run_solver(
                 z_max_value, Npoints_value, forwards=forwards_value, HS_correction=HS_correction_value,
                 variable1=self.solver['variable1'], phi_ini=phi_ini_value, variable2=self.solver['variable2'], 
-                phi_prime_ini=phi_prime_ini_value, method=self.solver['method'], which_root=self.solver['which_root']
+                phi_prime_ini=phi_prime_ini_value, method=self.solver['method'], which_root=self.solver['which_root'],
+                rtol=self.solver['rtol'], atol=self.solver['atol']
             )
     
     # Get derived products
