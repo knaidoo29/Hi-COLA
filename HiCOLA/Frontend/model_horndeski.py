@@ -1232,7 +1232,7 @@ class HorndeskiModel(StandardModel):
         return self.lambda_funcs['fried_closure_dE2'](E, *variables)
     
 
-    def _solve4E(self, variables, E_guess, timeout=10):
+    def _solve4E(self, variables, E_guess):
         """
         Solves the Friedmann closure relation for E.
 
@@ -1271,7 +1271,7 @@ class HorndeskiModel(StandardModel):
         return timeout - self._check_timer()
 
 
-    def _compute_primes(self, x, Y, timeout=5):
+    def _compute_primes(self, x, Y):
         """
         Compute prime functions for numerical solver.
 
@@ -1281,8 +1281,6 @@ class HorndeskiModel(StandardModel):
             Current value of log(a).
         Y : list
             List containing current [E, phi, phi_prime] values.
-        timeout : float, optional
-            Time in seconds to force the solver to fail.
         """
         # convert x = log(a) to scale factor
         a = np.exp(x)
@@ -1293,7 +1291,7 @@ class HorndeskiModel(StandardModel):
         try:
             
             variables = self._get_variables(a, _E, _phi, _phi_prime, E_newton=True)
-            _E = self._solve4E(variables, _E, timeout=timeout)
+            _E = self._solve4E(variables, _E)
 
             E_prime = self.lambda_funcs['E_prime'](_E, *variables)
             phi_prime = _phi_prime
@@ -1717,7 +1715,7 @@ class HorndeskiModel(StandardModel):
     
 
     def _run_solver_ODE_HG(
-            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False
+            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False, rtol=1e-12, atol=1e-12
         ):
         """
         Returns the Horndeski solver outputs.
@@ -1736,6 +1734,10 @@ class HorndeskiModel(StandardModel):
             only work if the reason for the failure is due to the equations becoming stiff.
         store_hat : bool, optional
             If true will store raw ODE outputs before normalisation corrections for E renormalisation via f_H.
+        rtol : float, optional
+            The relative tolerance used in the ODE solve_ivp function.
+        atol : float, optional
+            The absolute tolerance used in the ODE solve_ivp function.
         """
         if self.output['success'] == False:
 
@@ -1840,8 +1842,7 @@ class HorndeskiModel(StandardModel):
                         Y_ini,
                         t_eval=x_arr,
                         method=method,
-                        args=(timeout,),
-                        rtol = 1e-8,
+                        rtol=rtol, atol=atol, 
                         max_step=(x_arr[1]-x_arr[0])
                     )
                     
@@ -2316,7 +2317,7 @@ class HorndeskiModel(StandardModel):
             self, z_max=1200., Npoints=200, forwards=True, GR=False, variable1=1, variable2=None, 
             phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=5, newton_tol=1e-5,
             derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True,
-            which_root=None
+            which_root=None, rtol=1e-12, atol=1e-12
         ):
         """
         Runs the numerical solver for a user defined Horndeski model.
@@ -2357,6 +2358,12 @@ class HorndeskiModel(StandardModel):
         HS_correction : bool, optional
             Applies a bias correction to the Hu & Sugiyama prediction for z_star which is only valid
             for models close to Planck LCDM values during the early universe.
+        which_root : int, optional
+            Tells the solver to focus on a single root solution.
+        rtol : float, optional
+            The relative tolerance used in the ODE solve_ivp function.
+        atol : float, optional
+            The absolute tolerance used in the ODE solve_ivp function.
         
         Returns
         -------
@@ -2423,7 +2430,7 @@ class HorndeskiModel(StandardModel):
                 self._run_solver_ODE_HG(
                     E_ini, phi_ini, phi_prime_ini,
                     method=method, timeout=timeout, 
-                    store_hat=store_hat
+                    store_hat=store_hat, rtol=rtol, atol=atol
                 )
 
                 if derived:
