@@ -804,7 +804,7 @@ class HorndeskiModel(StandardModel):
         self._lambdified = False
 
 
-    def construct_model(self, lambdify=True, simplify=True):
+    def construct_model(self, lambdify=True, simplify=False):
         """
         Constructs Horndeski model with user defined functions.
 
