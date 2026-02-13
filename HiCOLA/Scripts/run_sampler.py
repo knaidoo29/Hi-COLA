@@ -1,8 +1,6 @@
-def main():
+def _main():
 
-    print('load sys')
     import sys
-    print('load os')
     from os import environ
 
     # Set thread environment variables FIRST
@@ -13,11 +11,9 @@ def main():
     environ['VECLIB_MAXIMUM_THREADS'] = N_THREADS
     environ['NUMEXPR_NUM_THREADS'] = N_THREADS
 
-    print('load HiCOLA')
     import HiCOLA
-    print('load yaml')
     import yaml
-
+    
     print(' Hi-COLA: Running Sampler')
     print()
 
@@ -81,4 +77,4 @@ def main():
     print(' - Done!')
 
 if __name__ == "__main__":
-    main()
+    _main()

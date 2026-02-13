@@ -58,6 +58,3 @@ HiCOLA = [
     "*.npz", 
     "Frontend/obs/DES_Dovekie/**/*",
     "Frontend/obs/DESY5/**/*"]
-
-[project.scripts]
-hicola-sampler = "HiCOLA.Frontend.run_sampler:main"

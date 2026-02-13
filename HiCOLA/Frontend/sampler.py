@@ -2391,7 +2391,7 @@ class Sampler():
 
         # draw random samples based on sample weights.
         randint = np.random.choice(np.arange(len(weights)), size=size, p=weights)
-
+        
         quantities = [
             'E', 'E_prime', 'phi', 'phi_prime', 'phi_primeprime',
             'H', 'Dc', 'G_G_4/G_N', 'Omega_DE', 'w_DE', 'beta', 
