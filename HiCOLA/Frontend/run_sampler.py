@@ -1,21 +1,22 @@
-import multiprocessing
-multiprocessing.set_start_method("spawn", force=True)
-
-import sys
-from os import environ
-
-# Set thread environment variables FIRST
-N_THREADS = '1'
-environ['OMP_NUM_THREADS'] = N_THREADS
-environ['OPENBLAS_NUM_THREADS'] = N_THREADS
-environ['MKL_NUM_THREADS'] = N_THREADS
-environ['VECLIB_MAXIMUM_THREADS'] = N_THREADS
-environ['NUMEXPR_NUM_THREADS'] = N_THREADS
-
-import HiCOLA
-import yaml
-
 def main():
+
+    print('load sys')
+    import sys
+    print('load os')
+    from os import environ
+
+    # Set thread environment variables FIRST
+    N_THREADS = '1'
+    environ['OMP_NUM_THREADS'] = N_THREADS
+    environ['OPENBLAS_NUM_THREADS'] = N_THREADS
+    environ['MKL_NUM_THREADS'] = N_THREADS
+    environ['VECLIB_MAXIMUM_THREADS'] = N_THREADS
+    environ['NUMEXPR_NUM_THREADS'] = N_THREADS
+
+    print('load HiCOLA')
+    import HiCOLA
+    print('load yaml')
+    import yaml
 
     print(' Hi-COLA: Running Sampler')
     print()
