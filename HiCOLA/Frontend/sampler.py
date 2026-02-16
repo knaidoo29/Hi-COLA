@@ -338,7 +338,7 @@ class Sampler():
             'Planck', 'H0_LOCAL_ALL', 'H0_LOCAL_SHOES', 'H0_LOCAL_MCP', 'H0_LOCAL_TRGB', 'H0_LOCAL_Type2SN',
             'DESI_DR2_BAO_FULL', 'DESI_DR2_BAO_BGS', 'DESI_DR2_BAO_LRG1', 'DESI_DR2_BAO_LRG2',
             'DESI_DR2_BAO_LRG3_ELG1', 'DESI_DR2_BAO_ELG2', 'DESI_DR2_BAO_QSO', 'DESI_DR2_BAO_LyA',
-            'DES_SN_Dovekie'
+            'DES_SN_Dovekie', 'ISW_sign'
         ]
         self.constraint2idx = {}
 
@@ -1305,6 +1305,7 @@ class Sampler():
         mu_theory += 25.
         return mu_theory
     
+
     # TODO: Remove these function or add PantheonPlus and Union3
     
     # def loglike_SN4PantheonPlus(self):
@@ -1335,6 +1336,47 @@ class Sampler():
         B = np.sum(delta @ self.inv_cov_DES_SN_Dovekie)
         chi2 = chit2 - (B**2 / self.C_DES_SN_Dovekie)
         loglike = -0.5*self.log_norm_DES_SN_Dovekie - 0.5*chi2
+        return loglike
+    
+
+    def theory_ISW_sign(self, root=0):
+        """
+        Computes ISW integral.
+
+        Parameters
+        ----------
+        root : int, optional
+            The solution of the numerical solver to look at.
+        """
+        if self.settings['model'] == 'GR':
+            chi = self.model.output['Dc']
+            intf = (self.model.output['D1']**2)*self.model.output['E']*(1-self.model.output['f1'])
+            f_ISW = simpson(intf[::-1], x=chi[::-1])
+        else:
+            chi = self.model.output['Dc'][root]
+            intf = (self.model.output['D1'][root]**2)*self.model.output['Sigma'][root]*self.model.output['E'][root]*(1-self.model.output['f1'][root]-self.model.output['zeta'][root])
+            f_ISW = simpson(intf[::-1], x=chi[::-1])
+        return f_ISW
+    
+
+    def loglike_ISW_sign(self, theory):
+        """
+        Computes soft ISW loglikelihood
+
+        Parameters
+        ----------
+        theory : array
+            Theoretical predictions for the ISW integral
+        
+        Returns
+        -------
+        loglike : float
+            Log likelihood to force positive ISW integral.
+        """
+        if theory < 0:
+            loglike = -np.inf
+        else:
+            loglike = 0.
         return loglike
 
 
@@ -1493,6 +1535,10 @@ class Sampler():
                 theory = self.theory_SN4DES_Dovekie()
                 loglike += self.loglike_SN4DES_Dovekie(theory)
             
+            if self.likelihood_switch['ISW_sign']:
+                theory = self.theory_ISW_sign(root=self.root)
+                loglike += self.loglike_ISW_sign(theory)
+
             return loglike, blob
     
 
