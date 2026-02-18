@@ -245,6 +245,21 @@ class Sampler():
 
                 self.model.define_extension(self.settings['extension'])
 
+                if self.settings['extension'] == 'G3_lin':
+                    
+                    if 'fphi/phi0_min' not in self.settings:
+                        self.settings['fphi/phi0_min'] = 0.1
+
+                elif self.settings['extension'] == 'G3_exp':
+                    
+                    if 'fphi/phi0_min' not in self.settings:
+                        self.settings['fphi/phi0_min'] = 0.1
+                
+                elif self.settings['extension'] == 'K_exp':
+                    
+                    if 'fphi/phi0_min' not in self.settings:
+                        self.settings['fphi/phi0_min'] = 0.1
+
             self.model.construct_model(lambdify=False)
 
         else:
@@ -1461,7 +1476,55 @@ class Sampler():
             loglike = self.log_prior(param_values)
         else:
             loglike = 0.
-        
+
+        if self.settings['model'] == 'AsymCubicGalileon':
+            
+            if self.settings['extension'] == 'G3_lin':
+
+                if self.params_info['phi_0'] == 'fixed':
+                    phi0_value = self.fixed_params['phi_0']
+                else:
+                    phi0_value = param_values[self.varied_param2idx['phi_0']]
+
+                if self.params_info['fphi_ini'] == 'fixed':
+                    fphi_value = self.fixed_params['fphi_ini']
+                else:
+                    fphi_value = param_values[self.varied_param2idx['fphi_ini']]
+
+                if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
+                    loglike += -np.inf
+            
+            elif self.settings['extension'] == 'G3_exp':
+
+                if self.params_info['phi_0'] == 'fixed':
+                    phi0_value = self.fixed_params['phi_0']
+                else:
+                    phi0_value = param_values[self.varied_param2idx['phi_0']]
+
+                if self.params_info['fphi_ini'] == 'fixed':
+                    fphi_value = self.fixed_params['fphi_ini']
+                else:
+                    fphi_value = param_values[self.varied_param2idx['fphi_ini']]
+
+                if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
+                    loglike += -np.inf
+
+            elif self.settings['extension'] == 'K_exp':
+
+                if self.params_info['phi_0'] == 'fixed':
+                    phi0_value = self.fixed_params['phi_0']
+                else:
+                    phi0_value = param_values[self.varied_param2idx['phi_0']]
+
+                if self.params_info['fphi_ini'] == 'fixed':
+                    fphi_value = self.fixed_params['fphi_ini']
+                else:
+                    fphi_value = param_values[self.varied_param2idx['fphi_ini']]
+
+                if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
+                    loglike += -np.inf
+
+
         if not np.isfinite(loglike):
             return -np.inf, np.ones(len(self.derived_keys))
         else:
