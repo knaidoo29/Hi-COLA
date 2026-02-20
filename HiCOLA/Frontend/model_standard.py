@@ -1054,7 +1054,7 @@ class StandardModel:
         GG4GN = self._linear_growth_int['interp_G_G_4/G_N_vs_a'](a)
         Bx = 2 + self._linear_growth_int['interp_E_prime_vs_a'](a)/self._linear_growth_int['interp_E_vs_a'](a)
         Cx = 3.*Omega_m0*mu*GG4GN/(2.*(self._linear_growth_int['interp_E_vs_a'](a)**2)*(a**3))
-        d2D = Cx*D - Bx*D
+        d2D = Cx*D - Bx*dD
         return [dD, d2D]
     
 
