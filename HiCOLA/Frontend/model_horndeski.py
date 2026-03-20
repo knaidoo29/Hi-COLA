@@ -1309,12 +1309,16 @@ class HorndeskiModel(StandardModel):
 
     # Numerically computed quantities
 
-    def compute_chi_over_delta(self, a, E, calB, calC, G_G_4_G_N):
+    def compute_chi_over_delta(self, Omega_c0, Omega_b0, a, E, calB, calC, G_G_4_G_N):
         """
         Computes the chi/delta function numerically.
 
         Parameters
         ----------
+        Omega_c0 : float
+            Cold dark matter fractional density.
+        Omega_b0 : float
+            Baryon fractional density.
         a : float or array
             Scale factor.
         E : float or array
@@ -1332,10 +1336,7 @@ class HorndeskiModel(StandardModel):
         chioverdelta : float or array   
             Code equivalent of equation 3.14 in https://arxiv.org/abs/2209.01666.
         """
-        if self.params['Omega_c0'] is None:
-            chioverdelta = None
-        else:
-            chioverdelta = calB * calC * (self.params['Omega_c0']+self.params['Omega_b0'])/((E**2)*(a**3)) * G_G_4_G_N
+        chioverdelta = calB * calC * (Omega_c0+Omega_b0)/((E**2)*(a**3)) * G_G_4_G_N
         return chioverdelta
     
 
@@ -2230,7 +2231,7 @@ class HorndeskiModel(StandardModel):
                 calB_arr[idx] = self.lambda_funcs['calB'](*variables)
                 calC_arr[idx] = self.lambda_funcs['calC'](*variables)
                 beta_arr[idx] = self.lambda_funcs['beta'](*variables)
-                chioverdelta_arr[idx] = self.compute_chi_over_delta(a_arr, E_arr[idx], calB_arr[idx], calC_arr[idx], G_G_4_G_N[idx])
+                chioverdelta_arr[idx] = self.compute_chi_over_delta(self.output['Omega_c0'][idx], self.output['Omega_b0'][idx], a_arr, E_arr[idx], calB_arr[idx], calC_arr[idx], G_G_4_G_N[idx])
 
                 M_star_sq_arr[idx] = self.lambda_funcs['M_star_sq'](*variables)
                 alpha_M_arr[idx] = self.lambda_funcs['alpha_M'](*variables)

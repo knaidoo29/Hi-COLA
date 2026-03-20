@@ -245,21 +245,21 @@ class Sampler():
 
                 self.model.define_extension(self.settings['extension'])
 
-                if self.settings['extension'] == 'G3_lin':
+                # if self.settings['extension'] == 'G3_lin':
                     
-                    if 'fphi/phi0_min' not in self.settings:
-                        self.settings['fphi/phi0_min'] = 0.1
+                #     if 'fphi/phi0_min' not in self.settings:
+                #         self.settings['fphi/phi0_min'] = 0.1
 
-                elif self.settings['extension'] == 'G3_exp':
+                # elif self.settings['extension'] == 'G3_exp':
                     
-                    if 'fphi/phi0_min' not in self.settings:
-                        self.settings['fphi/phi0_min'] = 0.1
+                #     if 'fphi/phi0_min' not in self.settings:
+                #         self.settings['fphi/phi0_min'] = 0.1
                 
-                elif self.settings['extension'] == 'K_exp':
+                # elif self.settings['extension'] == 'K_exp':
                     
-                    if 'fphi/phi0_min' not in self.settings:
-                        self.settings['fphi/phi0_min'] = 0.1
-
+                #     if 'fphi/phi0_min' not in self.settings:
+                #         self.settings['fphi/phi0_min'] = 0.1
+                
             self.model.construct_model(lambdify=False)
 
         else:
@@ -278,33 +278,81 @@ class Sampler():
 
         if self.settings['model'] == 'AsymCubicGalileon':
 
+            # if self.settings['extension'] == 'G3_lin':
+
+            #     # check phi_0
+            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+            #     self._check_param_settings('phi_0')
+            
+            # elif self.settings['extension'] == 'G3_quad':
+                
+            #     # check phi_0
+            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+            #     self._check_param_settings('phi_0')
+                
+            #     # check phi_1
+            #     assert 'phi_1' in self.settings, "Parameter 'phi_1' must be defined in settings dictionary."
+            #     self._check_param_settings('phi_1')
+
+            # elif self.settings['extension'] == 'G3_exp':
+                
+            #     # check phi_0
+            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+            #     self._check_param_settings('phi_0')
+            
+            # elif self.settings['extension'] == 'G3_pow':
+                
+            #     # check phi_0
+            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+            #     self._check_param_settings('phi_0')
+                
+            #     # check n
+            #     assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
+            #     self._check_param_settings('n')
+            
+            # elif self.settings['extension'] == 'K_exp':
+
+            #     # check phi_0
+            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+            #     self._check_param_settings('phi_0')
+
+            # elif self.settings['extension'] == 'K_exp_pow':
+
+            #     # check phi_0
+            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
+            #     self._check_param_settings('phi_0')
+
+            #     # check n
+            #     assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
+            #     self._check_param_settings('n')
+
             if self.settings['extension'] == 'G3_lin':
 
-                # check phi_0
-                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-                self._check_param_settings('phi_0')
+                # check c_g3
+                assert 'c_g3' in self.settings, "Parameter 'c_g3' must be defined in settings dictionary."
+                self._check_param_settings('c_g3')
             
             elif self.settings['extension'] == 'G3_quad':
                 
-                # check phi_0
-                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-                self._check_param_settings('phi_0')
+                # check c_g31
+                assert 'c_g31' in self.settings, "Parameter 'c_g31' must be defined in settings dictionary."
+                self._check_param_settings('c_g31')
                 
-                # check phi_1
-                assert 'phi_1' in self.settings, "Parameter 'phi_1' must be defined in settings dictionary."
-                self._check_param_settings('phi_1')
+                # check c_g32
+                assert 'c_g32' in self.settings, "Parameter 'c_g32' must be defined in settings dictionary."
+                self._check_param_settings('c_g32')
 
             elif self.settings['extension'] == 'G3_exp':
                 
-                # check phi_0
-                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-                self._check_param_settings('phi_0')
+                # check c_g3
+                assert 'c_g3' in self.settings, "Parameter 'c_g3' must be defined in settings dictionary."
+                self._check_param_settings('c_g3')
             
             elif self.settings['extension'] == 'G3_pow':
                 
-                # check phi_0
-                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-                self._check_param_settings('phi_0')
+                # check 
+                assert 'c_g3' in self.settings, "Parameter 'c_g3' must be defined in settings dictionary."
+                self._check_param_settings('c_g3')
                 
                 # check n
                 assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
@@ -312,15 +360,15 @@ class Sampler():
             
             elif self.settings['extension'] == 'K_exp':
 
-                # check phi_0
-                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-                self._check_param_settings('phi_0')
+                # check c_k
+                assert 'c_k' in self.settings, "Parameter 'c_k' must be defined in settings dictionary."
+                self._check_param_settings('c_k')
 
             elif self.settings['extension'] == 'K_exp_pow':
 
-                # check phi_0
-                assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-                self._check_param_settings('phi_0')
+                # check c_k
+                assert 'c_k' in self.settings, "Parameter 'c_k' must be defined in settings dictionary."
+                self._check_param_settings('c_k')
 
                 # check n
                 assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
@@ -517,72 +565,72 @@ class Sampler():
                 
                 if self.settings['extension'] == 'G3_lin':
 
-                    if self.params_info['phi_0'] == 'fixed':
-                        phi0_value = self.fixed_params['phi_0']
+                    if self.params_info['c_g3'] == 'fixed':
+                        c_g3_value = self.fixed_params['c_g3']
                     else:
-                        phi0_value = params[self.varied_param2idx['phi_0']]
+                        c_g3_value = params[self.varied_param2idx['c_g3']]
                     
-                    ext_K_G3_G4 = [phi0_value]
+                    ext_K_G3_G4 = [c_g3_value]
                 
                 elif self.settings['extension'] == 'G3_quad':
 
-                    if self.params_info['phi_0'] == 'fixed':
-                        phi0_value = self.fixed_params['phi_0']
+                    if self.params_info['c_g31'] == 'fixed':
+                        c_g31_value = self.fixed_params['c_g31']
                     else:
-                        phi0_value = params[self.varied_param2idx['phi_0']]
+                        c_g31_value = params[self.varied_param2idx['c_g31']]
                     
-                    if self.params_info['phi_1'] == 'fixed':
-                        phi1_value = self.fixed_params['phi_1']
+                    if self.params_info['c_g32'] == 'fixed':
+                        c_g32_value = self.fixed_params['c_g32']
                     else:
-                        phi1_value = params[self.varied_param2idx['phi_1']]
+                        c_g32_value = params[self.varied_param2idx['c_g32']]
                     
-                    ext_K_G3_G4 = [phi0_value, phi1_value]
+                    ext_K_G3_G4 = [c_g31_value, c_g32_value]
 
                 elif self.settings['extension'] == 'G3_exp':
                     
-                    if self.params_info['phi_0'] == 'fixed':
-                        phi0_value = self.fixed_params['phi_0']
+                    if self.params_info['c_g3'] == 'fixed':
+                        c_g3_value = self.fixed_params['c_g3']
                     else:
-                        phi0_value = params[self.varied_param2idx['phi_0']]
+                        c_g3_value = params[self.varied_param2idx['c_g3']]
                     
-                    ext_K_G3_G4 = [phi0_value]
+                    ext_K_G3_G4 = [c_g3_value]
                 
                 elif self.settings['extension'] == 'G3_pow':
                     
-                    if self.params_info['phi_0'] == 'fixed':
-                        phi0_value = self.fixed_params['phi_0']
+                    if self.params_info['c_g3'] == 'fixed':
+                        c_g3_value = self.fixed_params['c_g3']
                     else:
-                        phi0_value = params[self.varied_param2idx['phi_0']]
+                        c_g3_value = params[self.varied_param2idx['c_g3']]
                     
                     if self.params_info['n'] == 'fixed':
                         n_value = self.fixed_params['n']
                     else:
                         n_value = params[self.varied_param2idx['n']]
                     
-                    ext_K_G3_G4 = [phi0_value, n_value]
+                    ext_K_G3_G4 = [c_g3_value, n_value]
                 
                 elif self.settings['extension'] == 'K_exp':
                     
-                    if self.params_info['phi_0'] == 'fixed':
-                        phi0_value = self.fixed_params['phi_0']
+                    if self.params_info['c_k'] == 'fixed':
+                        c_k_value = self.fixed_params['c_k']
                     else:
-                        phi0_value = params[self.varied_param2idx['phi_0']]
+                        c_k_value = params[self.varied_param2idx['c_k']]
                     
-                    ext_K_G3_G4 = [phi0_value]
+                    ext_K_G3_G4 = [c_k_value]
                 
                 elif self.settings['extension'] == 'K_exp_pow':
                     
-                    if self.params_info['phi_0'] == 'fixed':
-                        phi0_value = self.fixed_params['phi_0']
+                    if self.params_info['c_k'] == 'fixed':
+                        c_k_value = self.fixed_params['c_k']
                     else:
-                        phi0_value = params[self.varied_param2idx['phi_0']]
+                        c_k_value = params[self.varied_param2idx['c_k']]
                     
                     if self.params_info['n'] == 'fixed':
                         n_value = self.fixed_params['n']
                     else:
                         n_value = params[self.varied_param2idx['n']]
                     
-                    ext_K_G3_G4 = [phi0_value, n_value]
+                    ext_K_G3_G4 = [c_k_value, n_value]
                     
             elif self.settings['model'] == 'ESS':
                    
@@ -1356,7 +1404,7 @@ class Sampler():
 
     def theory_ISW_sign(self, root=0):
         """
-        Computes ISW integral.
+        Computes ISW integral. 
 
         Parameters
         ----------
@@ -1481,48 +1529,87 @@ class Sampler():
             
             if self.settings['extension'] == 'G3_lin':
 
-                if self.params_info['phi_0'] == 'fixed':
-                    phi0_value = self.fixed_params['phi_0']
+                # if self.params_info['phi_0'] == 'fixed':
+                #     phi0_value = self.fixed_params['phi_0']
+                # else:
+                #     phi0_value = param_values[self.varied_param2idx['phi_0']]
+
+                # if self.params_info['fphi_ini'] == 'fixed':
+                #     fphi_value = self.fixed_params['fphi_ini']
+                # else:
+                #     fphi_value = param_values[self.varied_param2idx['fphi_ini']]
+
+                # if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
+                #     loglike += -np.inf
+                
+                if self.params_info['c_g3'] == 'fixed':
+                    c_g3_value = self.fixed_params['c_g3']
                 else:
-                    phi0_value = param_values[self.varied_param2idx['phi_0']]
+                    c_g3_value = param_values[self.varied_param2idx['c_g3']]
 
                 if self.params_info['fphi_ini'] == 'fixed':
                     fphi_value = self.fixed_params['fphi_ini']
                 else:
                     fphi_value = param_values[self.varied_param2idx['fphi_ini']]
 
-                if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
-                    loglike += -np.inf
+                # if fphi_value*c_g3_value < self.settings['fphi*c_g3_min']:
+                #     loglike += -np.inf
             
             elif self.settings['extension'] == 'G3_exp':
 
-                if self.params_info['phi_0'] == 'fixed':
-                    phi0_value = self.fixed_params['phi_0']
+                # if self.params_info['phi_0'] == 'fixed':
+                #     phi0_value = self.fixed_params['phi_0']
+                # else:
+                #     phi0_value = param_values[self.varied_param2idx['phi_0']]
+
+                # if self.params_info['fphi_ini'] == 'fixed':
+                #     fphi_value = self.fixed_params['fphi_ini']
+                # else:
+                #     fphi_value = param_values[self.varied_param2idx['fphi_ini']]
+
+                # if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
+                #     loglike += -np.inf
+                
+                if self.params_info['c_g3'] == 'fixed':
+                    c_g3_value = self.fixed_params['c_g3']
                 else:
-                    phi0_value = param_values[self.varied_param2idx['phi_0']]
+                    c_g3_value = param_values[self.varied_param2idx['c_g3']]
 
                 if self.params_info['fphi_ini'] == 'fixed':
                     fphi_value = self.fixed_params['fphi_ini']
                 else:
                     fphi_value = param_values[self.varied_param2idx['fphi_ini']]
 
-                if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
-                    loglike += -np.inf
+                # if fphi_value*c_g3_value < self.settings['fphi*c_g3_min']:
+                #     loglike += -np.inf
 
             elif self.settings['extension'] == 'K_exp':
 
-                if self.params_info['phi_0'] == 'fixed':
-                    phi0_value = self.fixed_params['phi_0']
+                # if self.params_info['phi_0'] == 'fixed':
+                #     phi0_value = self.fixed_params['phi_0']
+                # else:
+                #     phi0_value = param_values[self.varied_param2idx['phi_0']]
+
+                # if self.params_info['fphi_ini'] == 'fixed':
+                #     fphi_value = self.fixed_params['fphi_ini']
+                # else:
+                #     fphi_value = param_values[self.varied_param2idx['fphi_ini']]
+
+                # if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
+                #     loglike += -np.inf
+
+                if self.params_info['c_k'] == 'fixed':
+                    c_k_value = self.fixed_params['c_k']
                 else:
-                    phi0_value = param_values[self.varied_param2idx['phi_0']]
+                    c_k_value = param_values[self.varied_param2idx['c_k']]
 
                 if self.params_info['fphi_ini'] == 'fixed':
                     fphi_value = self.fixed_params['fphi_ini']
                 else:
                     fphi_value = param_values[self.varied_param2idx['fphi_ini']]
 
-                if fphi_value/phi0_value < self.settings['fphi/phi0_min']:
-                    loglike += -np.inf
+                # if fphi_value*c_k_value < self.settings['fphi*c_k_min']:
+                #     loglike += -np.inf
 
 
         if not np.isfinite(loglike):

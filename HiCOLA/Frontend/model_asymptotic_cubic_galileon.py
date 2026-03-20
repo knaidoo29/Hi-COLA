@@ -17,28 +17,54 @@ class AsymCubicGalileon(HorndeskiModel):
 
     def define_extension(self, ext):
         self.ext = ext
+
+        # if self.ext == 'G3_lin':
+        #     self.define_K('k_1*X', 'k_1')
+        #     self.define_G3('g_31*X*(1+phi/phi_0)', 'g_31, phi_0')
+        #     self.define_G4('0.5', None)
+        # elif self.ext == 'G3_quad':
+        #     self.define_K('k_1*X', 'k_1')
+        #     self.define_G3('g_31*X*(1+phi/phi_0 + (phi**2)/phi_1)', 'g_31, phi_0, phi_1')
+        #     self.define_G4('0.5', None)
+        # elif self.ext == 'G3_exp':
+        #     self.define_K('k_1*X', 'k_1')
+        #     self.define_G3('g_31*X*exp(phi/phi_0)', 'g_31, phi_0')
+        #     self.define_G4('0.5', None)
+        # elif self.ext == 'G3_pow':
+        #     self.define_K('k_1*X', 'k_1')
+        #     self.define_G3('g_31*X*(1+(phi**n)/phi_0)', 'g_31, phi_0, n')
+        #     self.define_G4('0.5', None)
+        # elif self.ext == 'K_exp':
+        #     self.define_K('k_1*X*exp(-phi/phi_0)', 'k_1, phi_0')
+        #     self.define_G3('g_31*X', 'g_31')
+        #     self.define_G4('0.5', None)
+        # elif self.ext == 'K_exp_pow':
+        #     self.define_K('k_1*X*exp(-(phi**n)/phi_0)', 'k_1, phi_0, n')
+        #     self.define_G3('g_31*X', 'g_31')
+        #     self.define_G4('0.5', None)
+
         if self.ext == 'G3_lin':
             self.define_K('k_1*X', 'k_1')
-            self.define_G3('g_31*X*(1+phi/phi_0)', 'g_31, phi_0')
+            self.define_G3('g_31*X*(1+c_g3*phi)', 'g_31, c_g3')
             self.define_G4('0.5', None)
         elif self.ext == 'G3_quad':
             self.define_K('k_1*X', 'k_1')
-            self.define_G3('g_31*X*(1+phi/phi_0 + (phi**2)/phi_1)', 'g_31, phi_0, phi_1')
+            self.define_G3('g_31*X*(1+c_g31*phi + c_g32*(phi**2))', 'g_31, c_g31, c_g32')
             self.define_G4('0.5', None)
         elif self.ext == 'G3_exp':
             self.define_K('k_1*X', 'k_1')
-            self.define_G3('g_31*X*exp(phi/phi_0)', 'g_31, phi_0')
+            self.define_G3('g_31*X*exp(c_g3*phi)', 'g_31, c_g3')
             self.define_G4('0.5', None)
         elif self.ext == 'G3_pow':
             self.define_K('k_1*X', 'k_1')
-            self.define_G3('g_31*X*(1+(phi**n)/phi_0)', 'g_31, phi_0, n')
+            self.define_G3('g_31*X*(1+c_g3*(phi**n))', 'g_31, c_g3, n')
             self.define_G4('0.5', None)
         elif self.ext == 'K_exp':
-            self.define_K('k_1*X*exp(-phi/phi_0)', 'k_1, phi_0')
+            self.define_K('k_1*X*exp(-c_k*phi)', 'k_1, c_k')
             self.define_G3('g_31*X', 'g_31')
             self.define_G4('0.5', None)
         elif self.ext == 'K_exp_pow':
-            self.define_K('k_1*X*exp(-(phi**n)/phi_0)', 'k_1, phi_0, n')
+            self.define_K('k_1*X*exp(-c_k*(phi**n))', 'k_1, c_k, n')
             self.define_G3('g_31*X', 'g_31')
             self.define_G4('0.5', None)
     
