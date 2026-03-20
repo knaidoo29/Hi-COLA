@@ -1626,7 +1626,7 @@ class Sampler():
                         self.run_model(param_values)
 
             blob = self.get_derived(root=self.root)
-            
+
             if any('DESI' in c for c in self.constraints):
                 self.prep4BAO()
             
@@ -1948,6 +1948,7 @@ class Sampler():
 
             self.samples = self.sampler.results.samples
             self.weights = self.sampler.results.importance_weights()
+            self.logl = self.sampler.results.logl
             if self.derived:
                 self.blob = self.sampler.results.blob
             
@@ -2026,6 +2027,7 @@ class Sampler():
 
             self.samples = self.sampler.get_chain(flat=True, discard=self.emcee_settings['burnin'])
             self.weights = np.ones(len(self.samples))
+            self.logl = self.sampler.get_log_prob(flat=True)
             if self.derived:
                 self.blob = self.sampler.get_blobs(flat=True, discard=self.emcee_settings['burnin'])
 
@@ -2090,9 +2092,9 @@ class Sampler():
             self.sampler = sampler
 
             if self.derived:
-                self.samples, self.weights, _, _, self.blob = self.sampler.posterior(return_blobs=True)
+                self.samples, self.weights, self.logl, _, self.blob = self.sampler.posterior(return_blobs=True)
             else:
-                self.samples, self.weights, _, _ = self.sampler.posterior()
+                self.samples, self.weights, self.logl, _ = self.sampler.posterior()
 
             # compute bayesian evidence
             self.logZ, self.logZerr = self.sampler.evidence()
@@ -2258,7 +2260,7 @@ class Sampler():
         if self.derived:
             np.savez(
                 self.fname + '_chains.npz', 
-                samples=self.samples, weights=self.weights, 
+                samples=self.samples, weights=self.weights, logl=self.logl,
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges,
                 blob=self.blob, derived_keys=self.derived_keys, derived_labels=self.derived_labels,
                 logZ=self.logZ, logZerr=self.logZerr
@@ -2266,7 +2268,7 @@ class Sampler():
         else:
             np.savez(
                 self.fname + '_chains.npz', 
-                samples=self.samples, weights=self.weights, 
+                samples=self.samples, weights=self.weights, logl=self.logl,
                 param_names=param_names, param_labels=param_labels, param_ranges=param_ranges,
                 logZ=self.logZ, logZerr=self.logZerr
             )
@@ -2357,6 +2359,7 @@ class Sampler():
             data = np.load(fname + '_chains.npz')
             samples = data['samples']
             weights = data['weights']
+            loglike = data['logl']
             param_names = list(data['param_names'])
             param_labels = list(data['param_labels'])
             param_ranges = list(data['param_ranges'])
@@ -2397,6 +2400,7 @@ class Sampler():
 
         sample_dict = {}
         sample_dict['weights'] = weights
+        sample_dict['loglike'] = loglike
         for (i, param) in enumerate(param_names):
             sample_dict = self.add2dict(sample_dict, param, samples[:,i], param_labels[i], param_ranges[i])
         
