@@ -94,8 +94,17 @@ class Sampler():
         else:
             self.varied_params[param] = {
                 'init': self.settings[param]['init'],
-                'prior': [self.settings[param]['prior'][0],self.settings[param]['prior'][1]],
+                'bounds': [self.settings[param]['bounds'][0],self.settings[param]['bounds'][1]],
             }
+            if self.settings[param]['prior']['type'] == 'flat':
+                self.varied_params[param]['prior'] = {'type': 'flat'}
+            elif self.settings[param]['prior']['type'] == 'gaussian':
+                self.varied_params[param]['prior'] = {
+                    'type': 'gaussian',
+                    'mean': self.settings[param]['prior']['mean'],
+                    'std': self.settings[param]['prior']['mean']
+                }
+
             self.params_info[param] = 'varied'
             self.varied_param2idx[param] = self.Nvaried
             self.Nvaried += 1
@@ -245,6 +254,8 @@ class Sampler():
 
                 self.model.define_extension(self.settings['extension'])
 
+                # TODO: remove.
+
                 # if self.settings['extension'] == 'G3_lin':
                     
                 #     if 'fphi/phi0_min' not in self.settings:
@@ -277,6 +288,8 @@ class Sampler():
         ### Add conditions for parameters from other models...
 
         if self.settings['model'] == 'AsymCubicGalileon':
+            
+            # TODO: remove.
 
             # if self.settings['extension'] == 'G3_lin':
 
@@ -389,10 +402,10 @@ class Sampler():
         for param in self.varied_params: 
             self.varied_idx2param[self.varied_param2idx[param]] = param
 
-        # Store prior ranges
+        # Store prior bound ranges
         self.init_value = np.array([self.varied_params[self.varied_idx2param[i]]['init'] for i in range(0, self.Nvaried)])
-        self.prior_min = np.array([self.varied_params[self.varied_idx2param[i]]['prior'][0] for i in range(0, self.Nvaried)])
-        self.prior_max = np.array([self.varied_params[self.varied_idx2param[i]]['prior'][1] for i in range(0, self.Nvaried)])
+        self.bound_min = np.array([self.varied_params[self.varied_idx2param[i]]['bounds'][0] for i in range(0, self.Nvaried)])
+        self.bound_max = np.array([self.varied_params[self.varied_idx2param[i]]['bounds'][1] for i in range(0, self.Nvaried)])
     
         # Constraints information
 
@@ -447,7 +460,11 @@ class Sampler():
             for key in self.varied_params.keys():
                 print(' -- %s' % key)
                 print(' --- init = %0.6f' % (self.varied_params[key]['init']))
-                print(' --- prior_bounds = %s' % (self.varied_params[key]['prior']))
+                print(' --- prior_bounds = %s' % (self.varied_params[key]['bounds']))
+                print(' --- prior_type = %s' % (self.varied_params[key]['prior']['type']))
+                if self.varied_params[key]['prior']['type'] == 'gaussian':
+                    print(' ---- mean = %s' % (self.varied_params[key]['prior']['mean']))
+                    print(' ---- std = %s' % (self.varied_params[key]['prior']['std']))
             
             print(' - Constraints:')
             for constraint in self.constraints:
@@ -1267,16 +1284,6 @@ class Sampler():
         return loglike
     
 
-    # TODO: Remove these function or add PantheonPlus and Union3
-
-    # def init_SN4PantheonPlus(self):
-    #     pass
-    
-
-    # def init_SN4Union3(self):
-    #     pass
-
-
     def init_SN4DES_Dovekie(self):
         """
         Initialise the data for DES SN Dovekie data set.
@@ -1338,16 +1345,6 @@ class Sampler():
         self.interp['DA_vs_x'] = interp1d(self.model.output['x'], DA)
 
 
-    # TODO: Remove these function or add PantheonPlus and Union3
-    
-    # def theory_SN4PantheonPlus(self):
-    #     pass
-    
-
-    # def theory_SN4Union3(self):
-    #     pass
-
-
     def theory_SN4DES_Dovekie(self):
         """
         Computes the theoretical predictions for the distance modulus for DES SN Dovekie.
@@ -1367,16 +1364,6 @@ class Sampler():
             mu_theory = 5.*np.log10(DL)
         mu_theory += 25.
         return mu_theory
-    
-
-    # TODO: Remove these function or add PantheonPlus and Union3
-    
-    # def loglike_SN4PantheonPlus(self):
-    #     pass
-
-
-    # def loglike_SN4Union3(self):
-    #     pass
     
 
     def loglike_SN4DES_Dovekie(self, theory):
@@ -1475,6 +1462,21 @@ class Sampler():
         
         if 'DES_SN_Dovekie' in self.constraints:
             self.init_SN4DES_Dovekie()
+        
+        self.param_prior_is_gaussian = []
+        self.param_prior_gaussian_mean = []
+        self.param_prior_gaussian_std = []
+
+        for i in range(0, self.Nvaried):
+            param = self.varied_idx2param[i]
+            if self.varied_params[param]['prior']['type'] == 'gaussian':
+                self.param_prior_is_gaussian.append(i)
+                self.param_prior_gaussian_mean.append(self.varied_params[param]['prior']['mean'])
+                self.param_prior_gaussian_std.append(self.varied_params[param]['prior']['std'])
+        
+        self.param_prior_is_gaussian = np.array(self.param_prior_is_gaussian)
+        self.param_prior_gaussian_mean = np.array(self.param_prior_gaussian_mean)
+        self.param_prior_gaussian_std = np.array(self.param_prior_gaussian_std)
     
 
     def ptform(self, u):
@@ -1486,23 +1488,41 @@ class Sampler():
         u : array
             Random variables.
         """
-        param_values = (self.prior_max-self.prior_min)*u + self.prior_min 
+        param_values = (self.bound_max-self.bound_min)*u + self.bound_min 
         return param_values
     
 
-    def log_prior(self, param_values):
+    def log_bound(self, param_values):
         """
-        Computes the log prior, for use with emcee.
+        Computes the log bound, for use with emcee.
 
         Parameters
         ----------
         param_values : array
             Parameter values.
         """
-        if np.all((param_values >= self.prior_min) & (param_values <= self.prior_max)):
+        if np.all((param_values >= self.bound_min) & (param_values <= self.bound_max)):
             return 0.
         else:
             return -np.inf
+        
+    
+    def log_prior(self, param_values):
+        """
+        Computes the log prior, which is only activated if non-flat priors are used.
+
+        Parameters
+        ----------
+        param_values : array
+            Parameter values.
+        """
+        if len(self.param_prior_is_gaussian) == 0:
+            return 0.
+        else:
+            _param_values = param_values[self.param_prior_is_gaussian]
+            _chi2 = ((_param_values - self.param_prior_gaussian_mean)/self.param_prior_gaussian_std)**2
+            _log_prior = - 0.5*np.sum(_chi2) - np.sum(np.log(self.param_prior_gaussian_std)) - len(_param_values)*0.5*np.log(2*np.pi)
+            return _log_prior
     
 
     def _loglike(self, param_values):
@@ -1521,9 +1541,11 @@ class Sampler():
         """
 
         if self.sampler_method == 'emcee':
-            loglike = self.log_prior(param_values)
+            loglike = self.log_bound(param_values)
         else:
             loglike = 0.
+        
+        loglike += self.log_prior(param_values)
 
         if self.settings['model'] == 'AsymCubicGalileon':
             
@@ -2041,7 +2063,7 @@ class Sampler():
 
             import pocomc as pc
 
-            prior_list = [uniform(loc=self.prior_min[i], scale=self.prior_max[i]-self.prior_min[i]) for i in range(0, self.Nvaried)]
+            prior_list = [uniform(loc=self.bound_min[i], scale=self.bound_max[i]-self.bound_min[i]) for i in range(0, self.Nvaried)]
 
             prior = pc.Prior(prior_list)
 
@@ -2148,7 +2170,7 @@ class Sampler():
 
         m = Minuit(nll_wrapped, *self.init_value)
         m.errordef = 0.5
-        m.limits = list(zip(self.prior_min, self.prior_max))
+        m.limits = list(zip(self.bound_min, self.bound_max))
 
         m.migrad()
         
@@ -2211,14 +2233,14 @@ class Sampler():
 
         m = Minuit(nll_wrapped, *self.init_value)
         m.errordef = 0.5
-        m.limits = list(zip(self.prior_min, self.prior_max))
+        m.limits = list(zip(self.bound_min, self.bound_max))
 
         m.migrad()
 
         profile_index = self.varied_param2idx[param]
 
         if bounds is None:
-            param_grid = np.linspace(self.prior_min[profile_index], self.prior_max[profile_index], size)
+            param_grid = np.linspace(self.bound_min[profile_index], self.bound_max[profile_index], size)
         else:
             param_grid = np.linspace(bounds[0], bounds[1], size)
 
@@ -2242,13 +2264,13 @@ class Sampler():
         param_labels : list
             List of parameter labels
         param_ranges : list
-            List parameter ranges and prior.
+            List parameter ranges and bounds.
         """
         param_names = [self.varied_idx2param[i] for i in range(self.Nvaried)]
         param_labels = [self.settings[self.varied_idx2param[i]]['label'] for i in range(self.Nvaried)]
         param_ranges = []
         for param in param_names:
-            param_ranges.append(self.varied_params[param]['prior'])
+            param_ranges.append(self.varied_params[param]['bounds'])
         return param_names, param_labels, param_ranges
     
     
@@ -2313,7 +2335,7 @@ class Sampler():
         Parameters
         ----------
         sample_dict : list
-            Sample dictionary with parameter chains, labels and priors.
+            Sample dictionary with parameter chains, labels and boundss.
         param : str
             Parameter name.
         chain : array
@@ -2328,7 +2350,7 @@ class Sampler():
         _dict = {}
         _dict['chains'] = chain
         _dict['label'] = label
-        _dict['prior'] = ranges
+        _dict['bounds'] = ranges
         sample_dict[param] = _dict
         return sample_dict
 
@@ -2349,11 +2371,11 @@ class Sampler():
         Returns
         -------
         sample_dict : dict
-            Sample dictionary with parameter chains, labels and priors.
+            Sample dictionary with parameter chains, labels and bounds.
         """
 
         if fname is None:
-            samples, weights = self.samples, self.weights
+            samples, weights, loglike = self.samples, self.weights, self.logl
             param_names, param_labels, param_ranges = self._get_param_info4chains()
         else:
             data = np.load(fname + '_chains.npz')
@@ -2465,7 +2487,7 @@ class Sampler():
         Parameters
         ----------
         sample_dict : dict
-            Sample dictionary with parameter chains, labels and priors.
+            Sample dictionary with parameter chains, labels and bounds.
         fname : str
             To load samples from a file.
         derived : bool
@@ -2489,12 +2511,12 @@ class Sampler():
         ranges_dict = {}
 
         for param in sample_dict.keys():
-            if param != 'weights':
+            if param != 'weights' and param != 'loglike':
                 param_names.append(param)
                 param_labels.append(sample_dict[param]['label'])
                 samples.append(sample_dict[param]['chains'])
-                if sample_dict[param]['prior'] is not None:
-                    ranges_dict[param] = sample_dict[param]['prior']
+                if sample_dict[param]['bounds'] is not None:
+                    ranges_dict[param] = sample_dict[param]['bounds']
 
         return param_names, MCSamples(samples=samples, names=param_names, labels=param_labels, weights=weights, ranges=ranges_dict, label=label)
     
@@ -2506,7 +2528,7 @@ class Sampler():
         Parameters
         ----------
         sample_dict : dict
-            Sample dictionary with parameter chains, labels and priors.
+            Sample dictionary with parameter chains, labels and bounds.
         fname : str
             To load samples from a file.
         derived : bool
@@ -2552,7 +2574,7 @@ class Sampler():
         Parameters
         ----------
         sample_dict : dict
-            Sample dictionary with parameter chains, labels and priors.
+            Sample dictionary with parameter chains, labels and bounds.
         
         Returns
         -------
