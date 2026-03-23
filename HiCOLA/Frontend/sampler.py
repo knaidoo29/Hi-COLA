@@ -102,7 +102,7 @@ class Sampler():
                 self.varied_params[param]['prior'] = {
                     'type': 'gaussian',
                     'mean': self.settings[param]['prior']['mean'],
-                    'std': self.settings[param]['prior']['mean']
+                    'std': self.settings[param]['prior']['std']
                 }
 
             self.params_info[param] = 'varied'
