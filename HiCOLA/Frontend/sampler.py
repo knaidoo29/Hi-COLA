@@ -317,8 +317,8 @@ class Sampler():
 
                 # TODO: remove
                 # check c_k
-                assert 'c_k' in self.settings, "Parameter 'c_k' must be defined in settings dictionary."
-                self._check_param_settings('c_k')
+                # assert 'c_k' in self.settings, "Parameter 'c_k' must be defined in settings dictionary."
+                # self._check_param_settings('c_k')
 
                 # check for c_k or fc_k
                 assert 'c_k' in self.settings or 'fc_k' in self.settings, \
@@ -584,11 +584,6 @@ class Sampler():
                     ext_K_G3_G4 = [c_g3_value, n_value]
                 
                 elif self.settings['extension'] == 'K_exp':
-                    
-                    if self.params_info['c_k'] == 'fixed':
-                        c_k_value = self.fixed_params['c_k']
-                    else:
-                        c_k_value = params[self.varied_param2idx['c_k']]
                     
                     if 'c_k' in self.params_info:
                         if self.params_info['c_k'] == 'fixed':
@@ -1514,7 +1509,7 @@ class Sampler():
             loglike = 0.
         
         loglike += self.log_prior(param_values)
-        
+
         if not np.isfinite(loglike):
             return -np.inf, np.ones(len(self.derived_keys))
         else:
