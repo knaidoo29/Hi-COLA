@@ -253,23 +253,6 @@ class Sampler():
             elif self.settings['model'] == 'AsymCubicGalileon':
 
                 self.model.define_extension(self.settings['extension'])
-
-                # TODO: remove.
-
-                # if self.settings['extension'] == 'G3_lin':
-                    
-                #     if 'fphi/phi0_min' not in self.settings:
-                #         self.settings['fphi/phi0_min'] = 0.1
-
-                # elif self.settings['extension'] == 'G3_exp':
-                    
-                #     if 'fphi/phi0_min' not in self.settings:
-                #         self.settings['fphi/phi0_min'] = 0.1
-                
-                # elif self.settings['extension'] == 'K_exp':
-                    
-                #     if 'fphi/phi0_min' not in self.settings:
-                #         self.settings['fphi/phi0_min'] = 0.1
                 
             self.model.construct_model(lambdify=False)
 
@@ -288,62 +271,21 @@ class Sampler():
         ### Add conditions for parameters from other models...
 
         if self.settings['model'] == 'AsymCubicGalileon':
-            
-            # TODO: remove.
-
-            # if self.settings['extension'] == 'G3_lin':
-
-            #     # check phi_0
-            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-            #     self._check_param_settings('phi_0')
-            
-            # elif self.settings['extension'] == 'G3_quad':
-                
-            #     # check phi_0
-            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-            #     self._check_param_settings('phi_0')
-                
-            #     # check phi_1
-            #     assert 'phi_1' in self.settings, "Parameter 'phi_1' must be defined in settings dictionary."
-            #     self._check_param_settings('phi_1')
-
-            # elif self.settings['extension'] == 'G3_exp':
-                
-            #     # check phi_0
-            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-            #     self._check_param_settings('phi_0')
-            
-            # elif self.settings['extension'] == 'G3_pow':
-                
-            #     # check phi_0
-            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-            #     self._check_param_settings('phi_0')
-                
-            #     # check n
-            #     assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
-            #     self._check_param_settings('n')
-            
-            # elif self.settings['extension'] == 'K_exp':
-
-            #     # check phi_0
-            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-            #     self._check_param_settings('phi_0')
-
-            # elif self.settings['extension'] == 'K_exp_pow':
-
-            #     # check phi_0
-            #     assert 'phi_0' in self.settings, "Parameter 'phi_0' must be defined in settings dictionary."
-            #     self._check_param_settings('phi_0')
-
-            #     # check n
-            #     assert 'n' in self.settings, "Parameter 'n' must be defined in settings dictionary."
-            #     self._check_param_settings('n')
 
             if self.settings['extension'] == 'G3_lin':
 
-                # check c_g3
-                assert 'c_g3' in self.settings, "Parameter 'c_g3' must be defined in settings dictionary."
-                self._check_param_settings('c_g3')
+                # TODO: remove
+                # # check c_g3
+                # assert 'c_g3' in self.settings, "Parameter 'c_g3' must be defined in settings dictionary."
+                # self._check_param_settings('c_g3')
+
+                # check for c_g3 or fc_g3
+                assert 'c_g3' in self.settings or 'fc_g3' in self.settings, \
+                    "Parameter 'c_g3' or 'fc_g3' must be defined in settings dictionary."
+                if 'c_g3' in self.settings:
+                    self._check_param_settings('c_g3')
+                elif 'fc_g3' in self.settings:
+                    self._check_param_settings('fc_g3')
             
             elif self.settings['extension'] == 'G3_quad':
                 
@@ -373,9 +315,18 @@ class Sampler():
             
             elif self.settings['extension'] == 'K_exp':
 
+                # TODO: remove
                 # check c_k
                 assert 'c_k' in self.settings, "Parameter 'c_k' must be defined in settings dictionary."
                 self._check_param_settings('c_k')
+
+                # check for c_k or fc_k
+                assert 'c_k' in self.settings or 'fc_k' in self.settings, \
+                    "Parameter 'c_k' or 'fc_k' must be defined in settings dictionary."
+                if 'c_k' in self.settings:
+                    self._check_param_settings('c_k')
+                elif 'fc_k' in self.settings:
+                    self._check_param_settings('fc_k')
 
             elif self.settings['extension'] == 'K_exp_pow':
 
@@ -582,10 +533,16 @@ class Sampler():
                 
                 if self.settings['extension'] == 'G3_lin':
 
-                    if self.params_info['c_g3'] == 'fixed':
-                        c_g3_value = self.fixed_params['c_g3']
+                    if 'c_g3' in self.params_info:
+                        if self.params_info['c_g3'] == 'fixed':
+                            c_g3_value = self.fixed_params['c_g3']
+                        else:
+                            c_g3_value = params[self.varied_param2idx['c_g3']]
                     else:
-                        c_g3_value = params[self.varied_param2idx['c_g3']]
+                        if self.params_info['c_g3'] == 'fixed':
+                            c_g3_value = self.fixed_params['fc_g3']/fphi_value
+                        else:
+                            c_g3_value = params[self.varied_param2idx['fc_g3']]/fphi_value
                     
                     ext_K_G3_G4 = [c_g3_value]
                 
@@ -632,6 +589,17 @@ class Sampler():
                         c_k_value = self.fixed_params['c_k']
                     else:
                         c_k_value = params[self.varied_param2idx['c_k']]
+                    
+                    if 'c_k' in self.params_info:
+                        if self.params_info['c_k'] == 'fixed':
+                            c_k_value = self.fixed_params['c_k']
+                        else:
+                            c_k_value = params[self.varied_param2idx['c_k']]
+                    else:
+                        if self.params_info['c_k'] == 'fixed':
+                            c_k_value = self.fixed_params['fc_k']/fphi_value
+                        else:
+                            c_k_value = params[self.varied_param2idx['fc_k']]/fphi_value
                     
                     ext_K_G3_G4 = [c_k_value]
                 
