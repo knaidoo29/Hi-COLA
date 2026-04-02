@@ -274,11 +274,6 @@ class Sampler():
 
             if self.settings['extension'] == 'G3_lin':
 
-                # TODO: remove
-                # # check c_g3
-                # assert 'c_g3' in self.settings, "Parameter 'c_g3' must be defined in settings dictionary."
-                # self._check_param_settings('c_g3')
-
                 # check for c_g3 or fc_g3
                 assert 'c_g3' in self.settings or 'fc_g3' in self.settings, \
                     "Parameter 'c_g3' or 'fc_g3' must be defined in settings dictionary."
@@ -315,11 +310,6 @@ class Sampler():
             
             elif self.settings['extension'] == 'K_exp':
 
-                # TODO: remove
-                # check c_k
-                # assert 'c_k' in self.settings, "Parameter 'c_k' must be defined in settings dictionary."
-                # self._check_param_settings('c_k')
-
                 # check for c_k or fc_k
                 assert 'c_k' in self.settings or 'fc_k' in self.settings, \
                     "Parameter 'c_k' or 'fc_k' must be defined in settings dictionary."
@@ -327,7 +317,13 @@ class Sampler():
                     self._check_param_settings('c_k')
                 elif 'fc_k' in self.settings:
                     self._check_param_settings('fc_k')
+            
+            elif self.settings['extension'] == 'K_rat':
 
+                # check for c_k or fc_k
+                assert 'c_k' in self.settings, "Parameter 'c_k' must be defined in settings dictionary."
+                self._check_param_settings('c_k')
+               
             elif self.settings['extension'] == 'K_exp_pow':
 
                 # check c_k
@@ -595,6 +591,15 @@ class Sampler():
                             c_k_value = self.fixed_params['fc_k']/fphi_value
                         else:
                             c_k_value = params[self.varied_param2idx['fc_k']]/fphi_value
+                    
+                    ext_K_G3_G4 = [c_k_value]
+                
+                elif self.settings['extension'] == 'K_rat':
+                    
+                    if self.params_info['c_k'] == 'fixed':
+                        c_k_value = self.fixed_params['c_k']
+                    else:
+                        c_k_value = params[self.varied_param2idx['c_k']]
                     
                     ext_K_G3_G4 = [c_k_value]
                 
