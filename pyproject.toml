@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
     "numpy",
     "scipy",
-    "sympy",
+    "sympy"
 ]
 dynamic = ["version"]
 
@@ -37,11 +37,7 @@ Changelog = "https://github.com/Hi-COLACode/Hi-COLA/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 dev = ["black", "flake8", "ipython", "jupyter", "mypy"]
 docs = ["numpydoc", "sphinx", "sphinx-rtd-theme"]
-test = [
-    "nose",
-    "pytest>=6.0",
-    "pytest-cov"
-]
+test = ["nose", "pytest>=6.0", "pytest-cov"]
 
 [tool.setuptools.dynamic]
 version = {file = ["VERSION"]}
@@ -54,4 +50,11 @@ exclude = ["build", "docs", "tests", "tutorials"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-skysegmentor = ["*.json", "*.md", "*.txt"]
+HiCOLA = [
+    "*.json", 
+    "*.md", 
+    "*.txt", 
+    "*.csv", 
+    "*.npz", 
+    "Frontend/obs/DES_Dovekie/**/*",
+    "Frontend/obs/DESY5/**/*"]

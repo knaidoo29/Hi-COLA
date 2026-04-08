@@ -1,10 +1,15 @@
 import numpy as np
-import time
 import sympy as sym
 from scipy.optimize import newton
 
+import signal
+
 from .model_standard import StandardModel
 from . import redshift, utils
+
+
+class TimeoutException(Exception):
+    pass
 
 
 class HorndeskiModel(StandardModel):
@@ -85,6 +90,7 @@ class HorndeskiModel(StandardModel):
         self.symfunc = {}
 
         # Lambda function dictionary
+        self._lambdified = False
         self.lambda_funcs = {}
 
         # Parameter values
@@ -294,7 +300,7 @@ class HorndeskiModel(StandardModel):
             self.sym['K_G3_G4_syms'].append(G3_sym)
         for G4_sym in self.sym['G4_syms']:
             self.sym['K_G3_G4_syms'].append(G4_sym)
-
+    
 
     def get_K_derivatives(self):
         """
@@ -306,7 +312,7 @@ class HorndeskiModel(StandardModel):
         self.symfunc['Kphi'] = sym.diff(self.symfunc['K'],self.sym['phi'])
         self.symfunc['Kphiphi'] = sym.diff(self.symfunc['Kphi'],self.sym['phi'])
         self.symfunc['Kphix'] = sym.diff(self.symfunc['Kphi'],self.sym['X'])
-            
+
 
     def get_G3_derivatives(self):
         """
@@ -359,7 +365,6 @@ class HorndeskiModel(StandardModel):
         self.symfunc['fried_closure'] += self.sym['rho_b'] + self.sym['rho_c'] + self.sym['rho_l']
         self.symfunc['fried_closure'] += self.symfunc['rho_phi']
         self.symfunc['fried_closure'] -= self.sym['E']**2
-        # self.symfunc['fried_closure'] /= self.sym['E']**2
 
 
     def get_G_G_4(self):
@@ -479,12 +484,12 @@ class HorndeskiModel(StandardModel):
         self.get_calE() # units H0^{2} * Mp^2
         self.get_calP() # units H0^{2} * Mp^2
         self.get_theta() # units H0 * Mp^2
+        
+        theta = self.symfunc['theta'].subs({self.sym['X']: (self.sym['E']**2 * self.sym['phi_prime']**2)/2})
 
-        X_prime = (self.sym['E']**2)*self.sym['phi_prime']*(self.symfunc['phi_primeprime'] + self.symfunc['E_prime']*self.sym['phi_prime']/self.sym['E'])
-
-        theta_prime = self.symfunc['E_prime']*sym.diff(self.symfunc['theta'], self.sym['E'])
-        theta_prime += self.sym['phi_prime']*sym.diff(self.symfunc['theta'], self.sym['phi'])
-        theta_prime += X_prime*sym.diff(self.symfunc['theta'], self.sym['X'])
+        theta_prime = self.symfunc['E_prime']*sym.diff(theta, self.sym['E'])
+        theta_prime += self.sym['phi_prime']*sym.diff(theta, self.sym['phi'])
+        theta_prime += self.symfunc['phi_primeprime']*sym.diff(theta, self.sym['phi_prime'])
 
         self.symfunc['alpha0'] = theta_prime/self.sym['E']
         self.symfunc['alpha0'] += self.symfunc['theta']/self.sym['E']
@@ -541,7 +546,7 @@ class HorndeskiModel(StandardModel):
         self.get_alpha2()
         self.symfunc['calC'] = (self.symfunc['alpha1'] + self.symfunc['alpha2'])/(self.symfunc['alpha0'] + 2.*self.symfunc['alpha1']*self.symfunc['alpha2'] + self.symfunc['alpha2']*self.symfunc['alpha2'])
 
-
+    
     def get_beta(self):
         """
         The coupling in equation 3.13 in https://arxiv.org/abs/2209.01666, i.e. the deviation from 1.
@@ -622,7 +627,7 @@ class HorndeskiModel(StandardModel):
         self.symfunc['tilde_calP'] /= self.symfunc['M_star_sq']
 
 
-    # # Stability and sound speed related functions
+    # Stability and sound speed related functions
 
     def get_Q_s(self):
         """
@@ -719,9 +724,96 @@ class HorndeskiModel(StandardModel):
 
     # Construct the symbolic model
 
-    def construct_model(self):
+    def _lambdify_symbolic(self):
+        # Lambdify functions
+
+        if self.verbose:
+            print(" - 'Lambdify'ing symbolic functions")
+
+        # keep variables fixed to functions solved in the ODE + Horndeski variables
+        variables = [
+            self.sym['E'],
+            self.sym['phi'],
+            self.sym['phi_prime'],
+            self.sym['rho_g'],
+            self.sym['rho_b'],
+            self.sym['rho_c'],
+            self.sym['rho_l'],
+            self.sym['rho_n_ur'],
+            self.sym['rho_n_nr'],
+            self.sym['w_n_nr'],
+            self.sym['w_l'],
+            *self.sym['K_G3_G4_syms'],
+            self.sym['f_H']
+        ]
+
+        # G_G_4/G_N function
+        self.lambda_funcs['G_G_4/G_N'] = sym.lambdify(variables, self.symfunc['G_G_4/G_N'], 'numpy')
+
+        # The effective scalar field density
+        self.lambda_funcs['rho_phi'] = sym.lambdify(variables, self.symfunc['rho_phi'], 'numpy')
+        self.lambda_funcs['Omega_phi'] = sym.lambdify(variables, self.symfunc['Omega_phi'], 'numpy')
+
+        # Friedmann closure relation
+        self.lambda_funcs['fried_closure'] = sym.lambdify(variables, self.symfunc['fried_closure'], 'numpy')
+
+        # Friedmann closure relation differentiated by E
+        self.lambda_funcs['fried_closure_dE'] = sym.lambdify(variables, self.symfunc['fried_closure_dE'], 'numpy')
+        self.lambda_funcs['fried_closure_dE2'] = sym.lambdify(variables, self.symfunc['fried_closure_dE2'], 'numpy')
+
+        # E_prime functions
+        self.lambda_funcs['A'] = sym.lambdify(variables, self.symfunc['A'], 'numpy')
+        self.lambda_funcs['B1'] = sym.lambdify(variables, self.symfunc['B1'], 'numpy')
+        self.lambda_funcs['B2'] = sym.lambdify(variables, self.symfunc['B2'], 'numpy')
+        self.lambda_funcs['E_prime'] = sym.lambdify(variables, self.symfunc['E_prime'], 'numpy')
+
+        # phi_primeprime functions
+        self.lambda_funcs['phi_primeprime'] = sym.lambdify(variables, self.symfunc['phi_primeprime'], 'numpy')
+
+        # internal Hi-COLA functions for force coupling
+        self.lambda_funcs['alpha0'] = sym.lambdify(variables, self.symfunc['alpha0'], 'numpy')
+        self.lambda_funcs['alpha1'] = sym.lambdify(variables, self.symfunc['alpha1'], 'numpy')
+        self.lambda_funcs['alpha2'] = sym.lambdify(variables, self.symfunc['alpha2'], 'numpy')
+        self.lambda_funcs['beta0'] = sym.lambdify(variables, self.symfunc['beta0'], 'numpy')
+        self.lambda_funcs['calB'] = sym.lambdify(variables, self.symfunc['calB'], 'numpy')
+        self.lambda_funcs['calC'] = sym.lambdify(variables, self.symfunc['calC'], 'numpy')
+        self.lambda_funcs['beta'] = sym.lambdify(variables, self.symfunc['beta'], 'numpy')
+        
+        # Bellini alphas and stability equations
+        self.lambda_funcs['M_star_sq'] = sym.lambdify(variables, self.symfunc['M_star_sq'], 'numpy')
+        self.lambda_funcs['alpha_M'] = sym.lambdify(variables, self.symfunc['alpha_M'], 'numpy')
+        self.lambda_funcs['alpha_B'] = sym.lambdify(variables, self.symfunc['alpha_B'], 'numpy')
+        self.lambda_funcs['alpha_B_prime'] = sym.lambdify(variables, self.symfunc['alpha_B_prime'], 'numpy')
+        self.lambda_funcs['alpha_K'] = sym.lambdify(variables, self.symfunc['alpha_K'], 'numpy')
+        self.lambda_funcs['tilde_calE'] = sym.lambdify(variables, self.symfunc['tilde_calE'], 'numpy')
+        self.lambda_funcs['tilde_calP'] = sym.lambdify(variables, self.symfunc['tilde_calP'], 'numpy')
+        self.lambda_funcs['D'] = sym.lambdify(variables, self.symfunc['D'], 'numpy')
+        self.lambda_funcs['Q_s'] = sym.lambdify(variables, self.symfunc['Q_s'], 'numpy')
+        self.lambda_funcs['c_s_sq_D'] = sym.lambdify(variables, self.symfunc['c_s_sq_D'], 'numpy')
+        self.lambda_funcs['c_s_sq'] = sym.lambdify(variables, self.symfunc['c_s_sq'], 'numpy')
+        self.lambda_funcs['f_MG'] = sym.lambdify(variables, self.symfunc['f_MG'], 'numpy')
+
+        self._lambdified = True
+
+    
+    def _delambdify(self):
+        """
+        Undoes and resets lambdified functions.
+        """
+        self.lambda_funcs = {}
+        self._lambdified = False
+
+
+    def construct_model(self, lambdify=True, simplify=False):
         """
         Constructs Horndeski model with user defined functions.
+
+        Parameters
+        ----------
+        lambdify : bool, optional
+            Lambdify symbolic expressions
+        simplify : bool, optional
+            This will instruct the code to simplify functions used in the ODE solver.
         """
 
         if self.verbose:
@@ -778,7 +870,7 @@ class HorndeskiModel(StandardModel):
 
             self.get_E_prime()
             E_prime = self.symfunc['E_prime'].subs(sub_dict)
-
+            
             self.get_phi_primeprime()
             phi_primeprime = self.symfunc['phi_primeprime'].subs(sub_dict)
 
@@ -832,6 +924,11 @@ class HorndeskiModel(StandardModel):
 
             self.get_f_MG()
             f_MG = self.symfunc['f_MG'].subs(sub_dict)
+
+            if simplify:
+                fried_closure = sym.simplify(fried_closure)
+                E_prime = sym.simplify(E_prime)
+                phi_primeprime = sym.simplify(phi_primeprime)
 
             if self.verbose:
                 print(' - substituting X = 0.5 * E^2 * phi_prime^2')
@@ -912,6 +1009,13 @@ class HorndeskiModel(StandardModel):
 
             f_MG = f_MG.subs(sub_dict)
 
+            if simplify:
+                fried_closure = sym.simplify(fried_closure)
+                fried_closure_dE = sym.simplify(fried_closure_dE)
+                fried_closure_dE2 = sym.simplify(fried_closure_dE2)
+                E_prime = sym.simplify(E_prime)
+                phi_primeprime = sym.simplify(phi_primeprime)
+
             # we will copy these substituted and simplified functions to the class symfunc dictionary, we avoided 
             # doing this before as some of these are re-called and redefined in the 'get' functions.
             self.symfunc['G_G_4/G_N'] = G_G_4_GN
@@ -947,80 +1051,16 @@ class HorndeskiModel(StandardModel):
             self.symfunc['c_s_sq_D'] = c_s_sq_D
             self.symfunc['c_s_sq'] = c_s_sq
             self.symfunc['f_MG'] = f_MG
-
-            # Lambdify functions
-
-            if self.verbose:
-                print(" - 'Lambdify'ing symbolic functions")
-
-            # keep variables fixed to functions solved in the ODE + Horndeski variables
-            variables = [
-                self.sym['E'],
-                self.sym['phi'],
-                self.sym['phi_prime'],
-                self.sym['rho_g'],
-                self.sym['rho_b'],
-                self.sym['rho_c'],
-                self.sym['rho_l'],
-                self.sym['rho_n_ur'],
-                self.sym['rho_n_nr'],
-                self.sym['w_n_nr'],
-                self.sym['w_l'],
-                *self.sym['K_G3_G4_syms'],
-                self.sym['f_H']
-            ]
-
-            # G_G_4/G_N function
-            self.lambda_funcs['G_G_4/G_N'] = sym.lambdify(variables, self.symfunc['G_G_4/G_N'], 'numpy')
-
-            # The effective scalar field density
-            self.lambda_funcs['rho_phi'] = sym.lambdify(variables, self.symfunc['rho_phi'], 'numpy')
-            self.lambda_funcs['Omega_phi'] = sym.lambdify(variables, self.symfunc['Omega_phi'], 'numpy')
-
-            # Friedmann closure relation
-            self.lambda_funcs['fried_closure'] = sym.lambdify(variables, self.symfunc['fried_closure'], 'numpy')
-
-            # Friedmann closure relation differentiated by E
-            self.lambda_funcs['fried_closure_dE'] = sym.lambdify(variables, self.symfunc['fried_closure_dE'], 'numpy')
-            self.lambda_funcs['fried_closure_dE2'] = sym.lambdify(variables, self.symfunc['fried_closure_dE2'], 'numpy')
-
-            # E_prime functions
-            self.lambda_funcs['A'] = sym.lambdify(variables, self.symfunc['A'], 'numpy')
-            self.lambda_funcs['B1'] = sym.lambdify(variables, self.symfunc['B1'], 'numpy')
-            self.lambda_funcs['B2'] = sym.lambdify(variables, self.symfunc['B2'], 'numpy')
-            self.lambda_funcs['E_prime'] = sym.lambdify(variables, self.symfunc['E_prime'], 'numpy')
-
-            # phi_primeprime functions
-            self.lambda_funcs['phi_primeprime'] = sym.lambdify(variables, self.symfunc['phi_primeprime'], 'numpy')
-
-            # internal Hi-COLA functions for force coupling
-            self.lambda_funcs['alpha0'] = sym.lambdify(variables, self.symfunc['alpha0'], 'numpy')
-            self.lambda_funcs['alpha1'] = sym.lambdify(variables, self.symfunc['alpha1'], 'numpy')
-            self.lambda_funcs['alpha2'] = sym.lambdify(variables, self.symfunc['alpha2'], 'numpy')
-            self.lambda_funcs['beta0'] = sym.lambdify(variables, self.symfunc['beta0'], 'numpy')
-            self.lambda_funcs['calB'] = sym.lambdify(variables, self.symfunc['calB'], 'numpy')
-            self.lambda_funcs['calC'] = sym.lambdify(variables, self.symfunc['calC'], 'numpy')
-            self.lambda_funcs['beta'] = sym.lambdify(variables, self.symfunc['beta'], 'numpy')
             
-            # Bellini alphas and stability equations
-            self.lambda_funcs['M_star_sq'] = sym.lambdify(variables, self.symfunc['M_star_sq'], 'numpy')
-            self.lambda_funcs['alpha_M'] = sym.lambdify(variables, self.symfunc['alpha_M'], 'numpy')
-            self.lambda_funcs['alpha_B'] = sym.lambdify(variables, self.symfunc['alpha_B'], 'numpy')
-            self.lambda_funcs['alpha_B_prime'] = sym.lambdify(variables, self.symfunc['alpha_B_prime'], 'numpy')
-            self.lambda_funcs['alpha_K'] = sym.lambdify(variables, self.symfunc['alpha_K'], 'numpy')
-            self.lambda_funcs['tilde_calE'] = sym.lambdify(variables, self.symfunc['tilde_calE'], 'numpy')
-            self.lambda_funcs['tilde_calP'] = sym.lambdify(variables, self.symfunc['tilde_calP'], 'numpy')
-            self.lambda_funcs['D'] = sym.lambdify(variables, self.symfunc['D'], 'numpy')
-            self.lambda_funcs['Q_s'] = sym.lambdify(variables, self.symfunc['Q_s'], 'numpy')
-            self.lambda_funcs['c_s_sq_D'] = sym.lambdify(variables, self.symfunc['c_s_sq_D'], 'numpy')
-            self.lambda_funcs['c_s_sq'] = sym.lambdify(variables, self.symfunc['c_s_sq'], 'numpy')
-            self.lambda_funcs['f_MG'] = sym.lambdify(variables, self.symfunc['f_MG'], 'numpy')
+            if lambdify == True:
+
+                self._lambdify_symbolic()
 
             if self.verbose:
                 print(' - Done!')
-    
+            
 
-    def set_cosmo_params(self, H0_ref, Omega_c0_ref, Omega_b0_ref, fphi, K_G3_G4_values, w0=-1., wa=0., Tcmb=2.7255, Tnu0=1.9518, mnu=[0.,0.,0.], Neff=3.044):
+    def set_cosmo_params(self, H0_ref, Omega_c0_ref, Omega_b0_ref, fphi, K_G3_G4_values, w0=-1., wa=0., Tcmb=2.7255, Tnu0=1.9518, mnu=[], Neff=3.044):
         """
         Set cosmological and Horndeski parameters.
 
@@ -1150,6 +1190,48 @@ class HorndeskiModel(StandardModel):
         return variables
 
 
+    def _lambda_fried_closure(self, E, variables):
+        """
+        Wrapper function for closure relation.
+
+        Parameters
+        ----------
+        E : float
+            Normalised Hubble function.
+        variables : array
+            Variables for symbolic functions, excluding leading E term.
+        """
+        return self.lambda_funcs['fried_closure'](E, *variables)
+    
+
+    def _lambda_fried_closure_dE(self, E, variables):
+        """
+        Wrapper function for the derivative of the closure relation wrt E.
+
+        Parameters
+        ----------
+        E : float
+            Normalised Hubble function.
+        variables : array
+            Variables for symbolic functions, excluding leading E term.
+        """
+        return self.lambda_funcs['fried_closure_dE'](E, *variables)
+    
+    
+    def _lambda_fried_closure_dE2(self, E, variables):
+        """
+        Wrapper function for the second derivative of the closure relation wrt E.
+
+        Parameters
+        ----------
+        E : float
+            Normalised Hubble function.
+        variables : array
+            Variables for symbolic functions, excluding leading E term.
+        """
+        return self.lambda_funcs['fried_closure_dE2'](E, *variables)
+    
+
     def _solve4E(self, variables, E_guess):
         """
         Solves the Friedmann closure relation for E.
@@ -1167,17 +1249,29 @@ class HorndeskiModel(StandardModel):
             The solution for E to solve the closure relation.
         """
 
+        # Note: Omitting fprime2 as this seems to be the source of instabilities in some of the outputs.
+        # This is because fprime2 uses Halley's method rather than Newton's method. The second can amplify
+        # noise which I believe is the source of this instability.
+
         E = newton(
-            lambda _E: self.lambda_funcs['fried_closure'](_E, *variables), 
+            lambda _E: self._lambda_fried_closure(_E, variables), 
             E_guess,
-            fprime = lambda _E: self.lambda_funcs['fried_closure_dE'](_E, *variables), 
-            fprime2 = lambda _E: self.lambda_funcs['fried_closure_dE2'](_E, *variables), 
+            fprime = lambda _E: self._lambda_fried_closure_dE(_E, variables), 
+            # fprime2 = lambda _E: self._lambda_fried_closure_dE2(_E, variables), 
             tol=self.newton_tol
         )
 
         return E
-    
-    def _compute_primes(self, x, Y, timeout=5):
+
+
+    def _failure_event(self, t, y, timeout):
+        """
+        Failure event to gracefully exit solve_ivp when
+        """
+        return timeout - self._check_timer()
+
+
+    def _compute_primes(self, x, Y):
         """
         Compute prime functions for numerical solver.
 
@@ -1187,49 +1281,44 @@ class HorndeskiModel(StandardModel):
             Current value of log(a).
         Y : list
             List containing current [E, phi, phi_prime] values.
-        timeout : float, optional
-            Time in seconds to force the solver to fail.
         """
-        try:
-            # convert x = log(a) to scale factor
-            a = np.exp(x)
+        # convert x = log(a) to scale factor
+        a = np.exp(x)
 
-            # `_` used to denote current value.
-            _E, _phi, _phi_prime = Y
+        # `_` used to denote current value.
+        _E, _phi, _phi_prime = Y
+    
+        try:
             
             variables = self._get_variables(a, _E, _phi, _phi_prime, E_newton=True)
-            
             _E = self._solve4E(variables, _E)
 
             E_prime = self.lambda_funcs['E_prime'](_E, *variables)
             phi_prime = _phi_prime
             phi_primeprime = self.lambda_funcs['phi_primeprime'](_E, *variables)
-
-            timenow = self._check_timer()
-
-            if timenow >= timeout:
-                E_prime = np.nan
-                phi_prime = np.nan
-                phi_primeprime = np.nan
-
-            if np.isfinite([E_prime, phi_prime, phi_primeprime]).all() == False:
-                self._solver_success = False
             
-            return [E_prime, phi_prime, phi_primeprime]
-        
         except RuntimeError:
-            # Signal RK45 that this step is invalid
-            return np.full_like(Y, np.nan)
+            self._ode_failed = True
+            return [0., 0., 0.] 
     
+        if not np.isfinite(E_prime) or not np.isfinite(phi_primeprime):
+            self._ode_failed = True
+            return [0., 0., 0.]
+        
+        return [E_prime, phi_prime, phi_primeprime]
 
     # Numerically computed quantities
 
-    def compute_chi_over_delta(self, a, E, calB, calC, G_G_4_G_N):
+    def compute_chi_over_delta(self, Omega_c0, Omega_b0, a, E, calB, calC, G_G_4_G_N):
         """
         Computes the chi/delta function numerically.
 
         Parameters
         ----------
+        Omega_c0 : float
+            Cold dark matter fractional density.
+        Omega_b0 : float
+            Baryon fractional density.
         a : float or array
             Scale factor.
         E : float or array
@@ -1247,10 +1336,7 @@ class HorndeskiModel(StandardModel):
         chioverdelta : float or array   
             Code equivalent of equation 3.14 in https://arxiv.org/abs/2209.01666.
         """
-        if self.params['Omega_c0'] is None:
-            chioverdelta = None
-        else:
-            chioverdelta = calB * calC * (self.params['Omega_c0']+self.params['Omega_b0'])/((E**2)*(a**3)) * G_G_4_G_N
+        chioverdelta = calB * calC * (Omega_c0+Omega_b0)/((E**2)*(a**3)) * G_G_4_G_N
         return chioverdelta
     
 
@@ -1270,55 +1356,55 @@ class HorndeskiModel(StandardModel):
 
                 check = True
 
-                if self.output['beta'] is None or np.isfinite(self.output['beta']).all() == False:
-                    check = False
+                keys = ['M_star_sq', 'alpha_B', 'alpha_M', 'c_s_sq_D']
+
+                check = True
+                for key in keys:
+                    if self.output[key] is None or np.isfinite(self.output[key]).all() == False:
+                        check = False
 
                 if check:
-                    mu = 1 + self.output['beta']
-                    if self.symfunc['alpha_M'].is_zero:
-                        Sigma = np.copy(mu)
-                        gamma = np.ones(len(mu))
-                    else:
-                        # using equation 6 and 7 from https://arxiv.org/pdf/2401.06221
-                        beta1 = 3*(self.output['rho_phi']/(self.output['H']**2))*(1 + self.output['w_phi']) + (self.output['E_prime']/self.output['E'])*(4 + self.output['alpha_B']) + self.output['alpha_B_prime']
-                        beta2 = self.output['alpha_B'] + 2*self.output['alpha_M']
-                        factor = 2*beta1 + 2*(1+self.output['alpha_M'])*beta2
-                        factor /= 2*beta1 + (2+self.output['alpha_M'])*beta2
-                        gamma = 2./factor - 1.
-                        Sigma = factor*np.copy(mu)
+                    # Note: Replaced mu = 1 + beta with full equation from Pogosian and Silvestri -- 1606.05339
+                    # mu = 1 + self.output['beta']
+                    mu = 1/self.output['M_star_sq']
+                    mu *= 1 + (2*(0.5*self.output['alpha_B']+self.output['alpha_M'])**2)/self.output['c_s_sq_D']
+                    Sigma = 1/self.output['M_star_sq']
+                    Sigma *= 1 + (0.5*self.output['alpha_B']+self.output['alpha_M'])*(self.output['alpha_B']+self.output['alpha_M'])/self.output['c_s_sq_D']
+                    gamma = 1 + self.output['alpha_B']*(0.5*self.output['alpha_B']+self.output['alpha_M'])/self.output['c_s_sq_D']
+                    gamma /= 1 + (2*(0.5*self.output['alpha_B']+self.output['alpha_M'])**2)/self.output['c_s_sq_D']
                 else:
                     mu, Sigma, gamma = None, None, None
 
             elif self.output['E'].ndim == 2:
 
                 mu = np.zeros(np.shape(self.output['E']))
-                gamma = np.zeros(np.shape(self.output['E']))
                 Sigma = np.zeros(np.shape(self.output['E']))
+                gamma = np.zeros(np.shape(self.output['E']))
 
                 for idx in range(0, len(self.output['Omega_c0'])):
 
                     check = True
 
-                    if self.output['beta'][idx] is None or np.isfinite(self.output['beta'][idx]).all() == False:
-                        check = False
+                    keys = ['M_star_sq', 'alpha_B', 'alpha_M', 'c_s_sq_D']
 
+                    check = True
+                    for key in keys:
+                        if self.output[key] is None or np.isfinite(self.output[key][idx]).all() == False:
+                            check = False
+                    
                     if check:
-                        mu[idx] = 1 + self.output['beta'][idx]
-                        if self.symfunc['alpha_M'].is_zero:
-                            Sigma[idx] = np.copy(mu[idx])
-                            gamma[idx] = np.ones(len(mu[idx]))
-                        else:
-                            # using equation 6 and 7 from https://arxiv.org/pdf/2401.06221
-                            beta1 = 3*(self.output['rho_phi'][idx]/(self.output['H'][idx]**2))*(1 + self.output['w_phi'][idx]) + (self.output['E_prime'][idx]/self.output['E'][idx])*(4 + self.output['alpha_B'][idx]) + self.output['alpha_B_prime'][idx]
-                            beta2 = self.output['alpha_B'][idx] + 2*self.output['alpha_M'][idx]
-                            factor = 2*beta1 + 2*(1+self.output['alpha_M'][idx])*beta2
-                            factor /= 2*beta1 + (2+self.output['alpha_M'][idx])*beta2
-                            gamma[idx] = 2./factor - 1.
-                            Sigma[idx] = factor*np.copy(mu[idx])
+                        # Note: Replaced mu = 1 + beta with full equation from Pogosian and Silvestri -- 1606.05339
+                        # mu[idx] = 1 + self.output['beta'][idx]
+                        mu[idx] = 1/self.output['M_star_sq'][idx]
+                        mu[idx] *= 1 + (2*(0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])**2)/self.output['c_s_sq_D'][idx]
+                        Sigma[idx] = 1/self.output['M_star_sq'][idx]
+                        Sigma[idx] *= 1 + (0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])*(self.output['alpha_B'][idx]+self.output['alpha_M'][idx])/self.output['c_s_sq_D'][idx]
+                        gamma[idx] = 1 + self.output['alpha_B'][idx]*(0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])/self.output['c_s_sq_D'][idx]
+                        gamma[idx] /= 1 + (2*(0.5*self.output['alpha_B'][idx]+self.output['alpha_M'][idx])**2)/self.output['c_s_sq_D'][idx]
                     else:
                         mu[idx] = np.nan * np.ones(len(self.output['x']))
-                        gamma[idx] = np.nan * np.ones(len(self.output['x']))
                         Sigma[idx] = np.nan * np.ones(len(self.output['x']))
+                        gamma[idx] = np.nan * np.ones(len(self.output['x']))
             
             else:
                 mu, Sigma, gamma = None, None, None
@@ -1394,7 +1480,7 @@ class HorndeskiModel(StandardModel):
             E_ini, E_prime_ini, phi_ini, phi_prime_ini, 
             rho_g_ini, rho_b_ini, rho_c_ini, rho_l_ini, w_l_ini,
             rho_nu_ur_ini, rho_nu_nr_ini, w_nu_nr_ini,
-            variable2=None
+            variable2=None, which_root=None
         ):
         """
         Finds the real roots for initialising the solver for 1 variable, using only the closure, 
@@ -1431,6 +1517,8 @@ class HorndeskiModel(StandardModel):
             Initial equation of state for massive neutrinos.
         variable2 : int
             Second variable jointly solved via the closure and E_prime equation to set up the initial conditions.
+        which_root : int, optional
+            Can specify which root to consider and thus which roots to ignore.
         """
 
         # Basic checks
@@ -1497,6 +1585,9 @@ class HorndeskiModel(StandardModel):
                 if root.is_real:
                     roots1.append(root)
             
+            if which_root is not None:
+                roots1 = [roots1[which_root]]
+
             variable2_str = None
             roots2_raw = None
             roots2 = None
@@ -1584,6 +1675,7 @@ class HorndeskiModel(StandardModel):
         self.output['Omega_l0'] = None
         self.output['Omega_nu_ur0'] = None
         self.output['Omega_nu_nr0'] = None
+        self.output['fphi0'] = None
         self.output['Ehat'] = None
         self.output['Ehat_prime'] = None
         self.output['phihat'] = None
@@ -1619,10 +1711,12 @@ class HorndeskiModel(StandardModel):
         self.output['w_l'] = None
     
 
+    def handler(self, signum, frame):
+        raise TimeoutException("ODE solver exceeded wall-clock timeout")
+    
+
     def _run_solver_ODE_HG(
-            self, 
-            E_ini, 
-            phi_ini, phi_prime_ini, method='RK45', timeout=5, store_hat=False
+            self, E_ini, phi_ini, phi_prime_ini, method='RK45', timeout=1, store_hat=False, rtol=1e-12, atol=1e-12
         ):
         """
         Returns the Horndeski solver outputs.
@@ -1641,6 +1735,10 @@ class HorndeskiModel(StandardModel):
             only work if the reason for the failure is due to the equations becoming stiff.
         store_hat : bool, optional
             If true will store raw ODE outputs before normalisation corrections for E renormalisation via f_H.
+        rtol : float, optional
+            The relative tolerance used in the ODE solve_ivp function.
+        atol : float, optional
+            The absolute tolerance used in the ODE solve_ivp function.
         """
         if self.output['success'] == False:
 
@@ -1707,7 +1805,8 @@ class HorndeskiModel(StandardModel):
             Omega_c0 = np.zeros(len(roots1)) 
             Omega_l0 = np.zeros(len(roots1))
             Omega_nu_ur0 = np.zeros(len(roots1)) 
-            Omega_nu_nr0 = np.zeros(len(roots1)) 
+            Omega_nu_nr0 = np.zeros(len(roots1))
+            fphi0 = np.zeros(len(roots1))
             fH = np.ones(len(roots1))
 
             for idx in range(0, len(roots1)):
@@ -1730,17 +1829,43 @@ class HorndeskiModel(StandardModel):
 
                 self._initiate_solver_status()
                 self._start_timer()
+
+                y_full = np.full((len(Y_ini), len(x_arr)), np.nan)
+
+                signal.signal(signal.SIGALRM, self.handler)
+                signal.alarm(int(timeout))
+
+                try:
+
+                    solution = solve_ivp(
+                        self._compute_primes, 
+                        [x_ini, x_final],
+                        Y_ini,
+                        t_eval=x_arr,
+                        method=method,
+                        rtol=rtol, atol=atol, 
+                        max_step=(x_arr[1]-x_arr[0])
+                    )
+                    
+                    mask = x_arr <= solution.t[-1]
+                    y_full[:, mask] = solution.y[:, :mask.sum()]
                 
-                solution = solve_ivp(
-                    self._compute_primes, [x_ini, x_final], Y_ini, t_eval=x_arr, method=method, 
-                    args=(timeout,),
-                    rtol = 1e-8,
-                    max_step=(x_arr[1]-x_arr[0])
-                )
+                except TimeoutException:
+                    print(" -- Solver timed out for root %i! Filling uncomputed points with NaNs." % idx)
+                    self._solver_success = False
+
+                    # We can still access y values from previously computed steps:
+                    if hasattr(self, "_last_computed_solution"):
+                        t_done, y_done = self._last_computed_solution
+                        mask = x_arr <= t_done[-1]
+                        y_full[:, mask] = y_done[:, :mask.sum()]
+
+                finally:
+                    signal.alarm(0)  # cancel the alarm
                 
                 solver_success[idx] = self._solver_success
                 
-                solution = solution["y"].T
+                solution = y_full.T
                 _E_arr = solution[:,0]
                 _phi_arr = solution[:,1]
                 _phi_prime_arr = solution[:,2]
@@ -1761,8 +1886,12 @@ class HorndeskiModel(StandardModel):
 
                     variables = self._get_variables(a, _E_arr[i], _phi_arr[i], _phi_prime_arr[i], E_newton=True)
 
-                    _E_arr[i] = self._solve4E(variables, _E_arr[i])
+                    try:
+                        _E_arr[i] = self._solve4E(variables, _E_arr[i])
 
+                    except RuntimeError:
+                        _E_arr[i] = np.nan
+                    
                     _rho_g_arr[i] = variables[2]
                     _rho_b_arr[i] = variables[3]
                     _rho_c_arr[i] = variables[4]
@@ -1859,10 +1988,7 @@ class HorndeskiModel(StandardModel):
                 if z_start == 0.:
                     self.params['H0'] = self.params['H0_ref']*Ehat_arr[idx][0]
                 else:
-                    if self._solver_success == True:
-                        self.params['H0'] = self.params['H0_ref']*Ehat_arr[idx][-1]
-                    else:
-                        self.params['H0'] = np.nan
+                    self.params['H0'] = self.params['H0_ref']*Ehat_arr[idx][-1]
                 
                 if np.isfinite(self.params['H0']) and self.params['H0'] != self.params['H0_ref'] and self._solver_success:
                     self.params['f_H_value'] = self.params['H0']/self.params['H0_ref']
@@ -1918,6 +2044,7 @@ class HorndeskiModel(StandardModel):
                 Omega_l0[idx] = self.params['Omega_l0']
                 Omega_nu_ur0[idx] = self.params['Omega_nu_ur0']
                 Omega_nu_nr0[idx] = self.params['Omega_nu_nr0']
+                fphi0[idx] = self.params['Omega_phi0']/(self.params['Omega_phi0']+self.params['Omega_l0'])
             
             self.output['solver_success'] = solver_success
             self.output['success'] = solver_success
@@ -1930,6 +2057,7 @@ class HorndeskiModel(StandardModel):
             self.output['Omega_l0'] = Omega_l0
             self.output['Omega_nu_ur0'] = Omega_nu_ur0
             self.output['Omega_nu_nr0'] = Omega_nu_nr0
+            self.output['fphi0'] = fphi0
             if store_hat:
                 self.output['Ehat'] = Ehat_arr
                 self.output['Ehat_prime'] = Ehat_prime_arr
@@ -1980,7 +2108,7 @@ class HorndeskiModel(StandardModel):
             self.output['w_nu_nr'] = w_nu_nr_arr
             self.output['w_l'] = w_l_arr
     
-
+    
     def _run_solver_derived_NONE(self):
         """
         Returns None for derived outputs.
@@ -2008,6 +2136,8 @@ class HorndeskiModel(StandardModel):
         self.output['Q_s'] = None
         self.output['c_s_sq_D'] = None
         self.output['c_s_sq'] = None
+        self.output['c_s_sq_gt_0'] = None
+        self.output['Q_s_gt_0'] = None
         self.output['f_MG'] = None
         self.output['stable'] = None
     
@@ -2044,7 +2174,7 @@ class HorndeskiModel(StandardModel):
             Omega_nu_nr_arr = self.output['Omega_nu_nr']
             w_nu_nr_arr = self.output['w_nu_nr']
             w_l_arr = self.output['w_l']
-
+            
             roots1 = self.output['initialiser']['roots1']
             
             G_G_4_G_N = np.zeros((len(roots1), len(x_arr)))
@@ -2075,6 +2205,8 @@ class HorndeskiModel(StandardModel):
             f_MG_arr = np.zeros((len(roots1), len(x_arr)))
 
             stable = [True for r in roots1]
+            c_s_sq_gt_0 = [True for r in roots1]
+            Q_s_gt_0 = [True for r in roots1]
 
             for (idx, _) in enumerate(roots1):
 
@@ -2099,7 +2231,7 @@ class HorndeskiModel(StandardModel):
                 calB_arr[idx] = self.lambda_funcs['calB'](*variables)
                 calC_arr[idx] = self.lambda_funcs['calC'](*variables)
                 beta_arr[idx] = self.lambda_funcs['beta'](*variables)
-                chioverdelta_arr[idx] = self.compute_chi_over_delta(a_arr, E_arr[idx], calB_arr[idx], calC_arr[idx], G_G_4_G_N[idx])
+                chioverdelta_arr[idx] = self.compute_chi_over_delta(self.output['Omega_c0'][idx], self.output['Omega_b0'][idx], a_arr, E_arr[idx], calB_arr[idx], calC_arr[idx], G_G_4_G_N[idx])
 
                 M_star_sq_arr[idx] = self.lambda_funcs['M_star_sq'](*variables)
                 alpha_M_arr[idx] = self.lambda_funcs['alpha_M'](*variables)
@@ -2121,8 +2253,18 @@ class HorndeskiModel(StandardModel):
                 c_s_sq_D_arr[idx] = self.lambda_funcs['c_s_sq_D'](*variables)
                 c_s_sq_arr[idx] = self.lambda_funcs['c_s_sq'](*variables)
                 f_MG_arr[idx] = self.lambda_funcs['f_MG'](*variables)
+                
+                if c_s_sq_arr.all() > 0:
+                    c_s_sq_gt_0[idx] = True
+                else:
+                    c_s_sq_gt_0[idx] = False
 
-                if Q_s_arr.all() > 0 and c_s_sq_arr.all() > 0 and f_MG_arr.all() <= 1:
+                if Q_s_arr.all() > 0:
+                    Q_s_gt_0[idx] = True
+                else:
+                    Q_s_gt_0[idx] = False
+
+                if Q_s_arr.all() > 0 and c_s_sq_arr.all() > 0: #and f_MG_arr.all() <= 1:
                     stable[idx] = True
                 else:
                     stable[idx] = False
@@ -2166,14 +2308,17 @@ class HorndeskiModel(StandardModel):
             self.output['Q_s'] = Q_s_arr
             self.output['c_s_sq_D'] = c_s_sq_D_arr
             self.output['c_s_sq'] = c_s_sq_arr
+            self.output['c_s_sq_gt_0'] = c_s_sq_gt_0
+            self.output['Q_s_gt_0'] = Q_s_gt_0
             self.output['f_MG'] = f_MG_arr
             self.output['stable'] = stable
 
 
     def run_solver(
-            self, z_max=1200., Npoints=1000, forwards=True, GR=False, variable1=2, variable2=None, 
+            self, z_max=1200., Npoints=200, forwards=True, GR=False, variable1=1, variable2=None, 
             phi_ini=1e-6, phi_prime_ini=1e-6, method='RK45', timeout=5, newton_tol=1e-5,
-            derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True
+            derived=True, LCDM_ini=True, values_ini=None, store_hat=False, HS_correction=True,
+            which_root=None, rtol=1e-12, atol=1e-12
         ):
         """
         Runs the numerical solver for a user defined Horndeski model.
@@ -2214,6 +2359,12 @@ class HorndeskiModel(StandardModel):
         HS_correction : bool, optional
             Applies a bias correction to the Hu & Sugiyama prediction for z_star which is only valid
             for models close to Planck LCDM values during the early universe.
+        which_root : int, optional
+            Tells the solver to focus on a single root solution.
+        rtol : float, optional
+            The relative tolerance used in the ODE solve_ivp function.
+        atol : float, optional
+            The absolute tolerance used in the ODE solve_ivp function.
         
         Returns
         -------
@@ -2222,7 +2373,7 @@ class HorndeskiModel(StandardModel):
         """
 
         if self.verbose:
-            print('Hi-COLA: Running numerical ODE solver')
+            print(' Hi-COLA: Running numerical ODE solver')
             print(' - Initialising solver...')
 
         self.output = {}
@@ -2242,7 +2393,7 @@ class HorndeskiModel(StandardModel):
              Omega_nu_ur_ini, 
              Omega_nu_nr_ini, w_nu_nr_ini) = values_ini
         
-        if GR:
+        if GR or self.params['fphi'] == 0.:
             if self.verbose:
                 print(' - Running in GR mode!')
 
@@ -2266,7 +2417,7 @@ class HorndeskiModel(StandardModel):
                 E_ini, E_prime_ini, phi_ini, phi_prime_ini, 
                 Omega_g_ini, Omega_b_ini, Omega_c_ini, Omega_l_ini, w_l_ini,
                 Omega_nu_ur_ini, Omega_nu_nr_ini, w_nu_nr_ini,
-                variable2,
+                variable2, which_root=which_root
             )
 
             if self.output['success']:
@@ -2280,13 +2431,13 @@ class HorndeskiModel(StandardModel):
                 self._run_solver_ODE_HG(
                     E_ini, phi_ini, phi_prime_ini,
                     method=method, timeout=timeout, 
-                    store_hat=store_hat
+                    store_hat=store_hat, rtol=rtol, atol=atol
                 )
 
                 if derived:
                     if self.verbose:
                         print(' - Computing main derived quantities.')
-
+                    
                     self._run_solver_derived_HG()
 
             else:
@@ -2311,7 +2462,7 @@ class HorndeskiModel(StandardModel):
 
             if self.verbose:
                 print(' - Computing additional derived quantities numerically.')
-        
+
             # compute the effective equation of state
             self.comp_w_eff()
 
@@ -2332,7 +2483,6 @@ class HorndeskiModel(StandardModel):
             self.get_z_star(apply_correction=HS_correction)
             self.get_r_star()
             self.get_theta_star()
-
 
         if self.verbose:
                 print(' - Done!')
@@ -2373,7 +2523,7 @@ class HorndeskiModel(StandardModel):
                     fname_expansion = fname_prefix + 'solution_%i_expansion.txt' % idx
                 else:
                     fname_expansion = fname_prefix + 'expansion.txt'
-                data = np.column_stack([self.output['a'], self.output['E'][idx], self.output['E_prime/E'][idx]/self.output['E'][idx]])
+                data = np.column_stack([self.output['a'], self.output['E'][idx], self.output['E_prime'][idx]/self.output['E'][idx]])
                 np.savetxt(fname_expansion, data, fmt=['%.4e', '%.4e', '%.4e'])
 
                 if len(self.output['Omega_c0']) != 1:
